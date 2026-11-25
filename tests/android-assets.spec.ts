@@ -163,7 +163,7 @@ test('Android notification confirmation goes back to the screen the user was on'
   await expect(page.getByRole('heading', { name: 'Bekleyen laboratuvar işleri' })).toBeVisible();
 });
 
-test('Android shows returned lab work and removes the appointment warning when its last hold clears', async ({ page }) => {
+test('Android shows the booking warnings and keeps a callback open when Ara copies the number', async ({ page }) => {
   const unexpected = await mockAndroidBridge(page);
   await page.setViewportSize({ width: 384, height: 832 });
   const records = fictionalRecords(new Date(2026, 10, 23, 8));
@@ -176,7 +176,7 @@ test('Android shows returned lab work and removes the appointment warning when i
     lab('returned-blocked', 'demo-jonah', 'Gece plağı', '2026-11-22'),
     lab('returned-booked', 'demo-eli', 'Zirkonyum prova', '2026-11-22'),
     lab('pending-nora', 'demo-nora', 'Köprü provası', null),
-    lab('pending-mira', 'demo-mira', 'Kron provası', null),
+    { ...lab('pending-mira', 'demo-mira', 'Hasta yanıtı bekleniyor', null), type: 'Patient reply' },
   );
   records.appointments = records.appointments.filter(visit => ['demo-1', 'demo-4', 'demo-5'].includes(visit.id))
     .map(visit => visit.id === 'demo-4' ? visit : {
@@ -191,9 +191,21 @@ test('Android shows returned lab work and removes the appointment warning when i
   await page.context().setOffline(true);
   await page.goto('https://localhost/#/today');
 
-  const warning = page.getByRole('region', { name: 'Yarınki randevular' });
+  const warning = page.getByRole('region', { name: 'Kontrol gerektiren randevular' });
+  const callbacks = page.getByRole('region', { name: 'Aranacak hastalar' });
   await expect(warning.getByRole('listitem')).toHaveCount(2);
-  await warning.getByRole('listitem').filter({ hasText: 'MİRA ARDEN' }).getByRole('link', { name: 'Randevuyu aç' }).click();
+  const nonLabWarning = warning.getByRole('listitem').filter({ hasText: 'MİRA ARDEN' });
+  await expect(nonLabWarning).toContainText('Hasta yanıtı bekleniyor');
+  await expect(nonLabWarning).toContainText('Yarın');
+  await expect(callbacks.getByRole('listitem')).toHaveCount(1);
+  await callbacks.getByRole('button', { name: 'Ara', exact: true }).click();
+  await expect(callbacks.getByRole('status')).toHaveText('Telefon numarası kopyalandı.');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('mock-copied-phone')!))).toBe('+1 202-555-0104');
+  await expect(callbacks.getByRole('listitem')).toHaveCount(1);
+  await callbacks.getByRole('button', { name: 'Arama hatırlatmasını kapat' }).click();
+  await expect(callbacks).toHaveCount(0);
+
+  await nonLabWarning.getByRole('link', { name: 'Randevuyu aç' }).click();
   await page.getByText('Randevu sonucu', { exact: true }).click();
   await page.getByRole('button', { name: 'Diğer sonuçlar', exact: true }).click();
   await page.getByRole('button', { name: 'İptal edildi', exact: true }).click();
@@ -230,6 +242,21 @@ test('Android shows returned lab work and removes the appointment warning when i
   await page.getByRole('navigation').getByRole('link', { name: 'Bugün', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Bugün', exact: true })).toBeVisible();
   await expect(warning).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Bugün', exact: true })).toBeVisible();
+  await expect(callbacks).toHaveCount(0);
+
+  await page.goto('https://localhost/#/patients/demo-mira');
+  await page.getByRole('tab', { name: 'Takip', exact: true }).click();
+  await page.getByRole('button', { name: 'Randevu için arama hatırlatması ekle' }).click();
+  await expect(page.getByRole('button', { name: 'Arama hatırlatması eklendi' })).toBeDisabled();
+  await page.getByRole('navigation').getByRole('link', { name: 'Bugün', exact: true }).click();
+  await expect(callbacks).toHaveCount(0);
+  await page.goto('https://localhost/#/patients/demo-mira/responses/pending-mira?from=today');
+  await page.getByRole('button', { name: 'Tamamlandı', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Randevuya hazır' }).getByRole('button', { name: 'Daha sonra' }).click();
+  await page.getByRole('link', { name: 'Geri', exact: true }).click();
+  await expect(callbacks.getByText('MİRA ARDEN', { exact: true })).toBeVisible();
   expect(unexpected).toEqual([]);
 });
 

@@ -13,7 +13,7 @@ import { FollowUpList } from '../components/FollowUpList';
 import { OutcomeShortcut } from './AppointmentOutcomes';
 import { TaskList } from './Tasks';
 import { LabCheckShortcut } from './DailyLabCheck';
-import { LabAppointmentWarnings } from './LabReturns';
+import { AppointmentsToReview, PatientsToCall } from './TodayFollowUp';
 
 function UpcomingOpenings({ records, today, readyCount, calendarAccess }: {
   records: Records; today: string; readyCount: number; calendarAccess: DeviceCalendarAccess;
@@ -95,8 +95,9 @@ export default function Today({ records, today, now, outstanding, calendarAccess
         </a>)}
       </div>
     </div>
+    <AppointmentsToReview records={records} today={today} />
+    <PatientsToCall records={records} today={today} now={now} save={save} />
     <LabCheckShortcut records={records} today={today} />
-    <LabAppointmentWarnings records={records} today={today} />
     <OutcomeShortcut visits={outstanding} today={today} />
     <UpcomingOpenings records={records} today={today} readyCount={ready.length} calendarAccess={calendarAccess} />
     <div className="today-columns">

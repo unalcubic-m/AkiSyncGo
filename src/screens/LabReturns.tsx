@@ -1,7 +1,7 @@
-import { CalendarBlank, CalendarPlus, CaretDown, LockSimple, WarningCircle } from '@phosphor-icons/react';
+import { CalendarBlank, CalendarPlus, CaretDown, LockSimple } from '@phosphor-icons/react';
 import { Empty, path, Pill } from '../components/ui';
 import { formatDate } from '../domain/dates';
-import { labAppointmentsAtRisk, labReturnsView, returnedLabPatients, type LabReturnRow } from '../domain/lab-returns';
+import { labReturnsView, returnedLabPatients, type LabReturnRow } from '../domain/lab-returns';
 import type { Records } from '../domain/model';
 import { t } from '../i18n';
 import { useRouteField } from '../navigation';
@@ -74,28 +74,4 @@ export function LabReturnList({ records, today, now }: { records: Records; today
       <ul className="compact-list">{booked.map(entry => <ReturnedPatientRow key={entry.patient.id} entry={entry} />)}</ul>
     </details>}
   </div>;
-}
-
-export function LabAppointmentWarnings({ records, today }: { records: Records; today: string }) {
-  const visits = labAppointmentsAtRisk(records, today);
-  if (!visits.length) return null;
-
-  const includesToday = visits.some(({ visit }) => visit.date === today);
-  return <section className="panel lab-appointment-warning" aria-labelledby="lab-appointment-warning-title">
-    <header className="lab-appointment-warning-heading">
-      <span className="lab-warning-icon"><WarningCircle size={21} aria-hidden /></span>
-      <div><h2 id="lab-appointment-warning-title">{t(includesToday ? 'Today and tomorrow’s appointments' : 'Tomorrow’s appointments')}</h2>
-        <small>{t('Waiting for lab work')}</small></div>
-      <Pill tone="amber">{visits.length}</Pill>
-    </header>
-    <ul className="compact-list">
-      {visits.map(({ visit, patient, jobs }) => <li className="lab-appointment-warning-row" key={visit.id}>
-        <div className="lab-warning-row-copy"><strong>{patient.name}</strong>
-          <small>{t(visit.date === today ? 'Today' : 'Tomorrow')} · {visit.start}–{visit.end}</small>
-          <small>{jobs.map(job => job.title).join(' · ')}</small>
-        </div>
-        <a className="planning-book-action" href={path(`/appointments/${visit.id}?from=today&lab-warning=1`)}>{t('Open appointment')}</a>
-      </li>)}
-    </ul>
-  </section>;
 }

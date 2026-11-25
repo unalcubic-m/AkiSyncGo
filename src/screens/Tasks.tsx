@@ -79,7 +79,7 @@ export function TaskList({ tasks, patients, today, save, from, history = false }
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const open = openTasks(tasks).sort((a, b) => a.title.localeCompare(b.title, getLocale()));
-  const completed = tasks.filter(task => task.completedOn)
+  const completed = tasks.filter(task => task.completedOn && !task.bookingCallback)
     .sort((a, b) => b.completedOn!.localeCompare(a.completedOn!) || a.title.localeCompare(b.title, getLocale()));
   const onToday = from === 'today';
 

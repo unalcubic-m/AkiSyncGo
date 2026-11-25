@@ -584,14 +584,14 @@ export function AppointmentForm({ records, item, selectedPatient, selectedDate, 
   return <><PageHeader title={title} back={back} />{form}</>;
 }
 
-export function AppointmentDetail({ item, records, now, back, editLink, followUpLink, conflicts, save, outcomePending, fromLabWarning, remove, onDeleted }: {
+export function AppointmentDetail({ item, records, now, back, editLink, followUpLink, conflicts, save, outcomePending, fromBookingWarning, remove, onDeleted }: {
   item: Appointment; records: Records; now: Date; back: string; editLink: string; followUpLink: string; conflicts: ScheduleConflict[]; save: (change: RecordChange) => Promise<void>;
-  outcomePending: boolean; fromLabWarning?: boolean; remove: () => Promise<void>; onDeleted: () => void;
+  outcomePending: boolean; fromBookingWarning?: boolean; remove: () => Promise<void>; onDeleted: () => void;
 }) {
   const patient = records.patients.find(entry => entry.id === item.patientId);
   const linked = records.notes.filter(note => note.appointmentId === item.id);
   const alerts = patient ? activeAlerts(records, patient.id) : [];
-  const replacement = fromLabWarning && item.kind === 'Visit' && item.status === 'Cancelled'
+  const replacement = fromBookingWarning && item.kind === 'Visit' && (item.status === 'Cancelled' || item.status === 'Postponed')
     && localTimestamp(item.date, item.start) > now.getTime()
     ? '/appointments/new?' + new URLSearchParams({ from: 'today', date: item.date, start: item.start, end: item.end })
     : undefined;

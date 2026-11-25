@@ -5,6 +5,7 @@ import { useDeviceCalendarAccess } from './components/DeviceCalendarAccess';
 import { GoogleCalendarPublishing, useGoogleCalendarPublishing } from './components/GoogleCalendarPublishing';
 import { ButtonLink, Empty, PageHeader, path } from './components/ui';
 import { localDate } from './domain/dates';
+import { updateCallbacksForBookings } from './domain/booking-callbacks';
 import { labFollowUpsRoute, labResultMessage, labRoute } from './domain/daily-lab';
 import { labReturnsRoute, labReturnsView } from './domain/lab-returns';
 import { z } from 'zod';
@@ -114,14 +115,15 @@ export default function App({ repository, native = false, previewStatus = 'Ficti
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  async function save(change: RecordChange, { offerBooking = true } = {}) {
+  async function save(change: RecordChange, { offerBooking = true, restoring = false } = {}) {
     if (writing.current) throw new Error('A change is already saving. Try again in a moment.');
     writing.current = true;
     try {
       let previous: Records | undefined;
       const saved = await repository.update(current => {
         previous = current;
-        return pruneScheduleOverlapIgnores(change(current));
+        const next = pruneScheduleOverlapIgnores(change(current));
+        return restoring ? next : updateCallbacksForBookings(current, next, localDate());
       });
       setRecords(saved);
       const newlyReady = offerBooking && previous ? newlyBookablePatients(previous, saved, localDate()) : [];
@@ -148,8 +150,8 @@ export default function App({ repository, native = false, previewStatus = 'Ficti
       : from === 'ignored-calendar-events' ? '/ignored-calendar-events'
       : profileBack ? '/patients/' + profileBack : calendarBack);
     const returnTo = from ? workReturnRoutes.get(from) : undefined;
-    const fromLabWarning = from === 'today' && params.get('lab-warning') === '1';
-    const originQuery = from ? '?from=' + encodeURIComponent(from) + (fromLabWarning ? '&lab-warning=1' : '') : '';
+    const fromBookingWarning = from === 'today' && (params.get('booking-warning') === '1' || params.get('lab-warning') === '1');
+    const originQuery = from ? '?from=' + encodeURIComponent(from) + (fromBookingWarning ? '&booking-warning=1' : '') : '';
     switch (section) {
       case 'today': return <Today records={records} today={today} now={now} outstanding={outstanding} calendarAccess={calendarAccess} save={save} />;
       case 'daily-lab': {
@@ -230,7 +232,7 @@ export default function App({ repository, native = false, previewStatus = 'Ficti
             block={block} calendarAccess={calendarAccess} back={appointment ? detail : appointmentBack} save={save} />;
         }
         if (appointment) return <AppointmentDetail item={appointment} records={records} now={now} back={appointmentBack} save={save}
-          fromLabWarning={fromLabWarning}
+          fromBookingWarning={fromBookingWarning}
           outcomePending={outstanding.some(visit => visit.id === appointment.id)}
           remove={() => save(current => deleteAppointment(current, appointment.id, appointment.kind), { offerBooking: false })}
           onDeleted={() => {
@@ -279,7 +281,7 @@ export default function App({ repository, native = false, previewStatus = 'Ficti
           back={from === 'today' ? '/today' : from === 'notifications' ? '/data/notifications' : '/data'} />;
         return dataPanel({
           refresh, save, records, today,
-          restoreRecords: restored => save(() => restored),
+          restoreRecords: restored => save(() => restored, { restoring: true }),
           calendarPublishing: native ? <GoogleCalendarPublishing publishing={publishing} refreshCalendar={calendarAccess.refresh} /> : undefined,
         });
     }

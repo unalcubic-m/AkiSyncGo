@@ -1,4 +1,3 @@
-import { pendingLabs } from './daily-lab';
 import { addDays } from './dates';
 import type { Patient, Records, Visit, Wait } from './model';
 import { bookingBlockers, outstandingVisits, planningCandidates, slotOrder, upcomingVisits } from './workflows';
@@ -61,14 +60,14 @@ export function returnedLabPatients(records: Records, today: string, now: Date) 
   return { ready, blocked, booked };
 }
 
-export function labAppointmentsAtRisk(records: Records, today: string) {
+export function appointmentsWithBookingHolds(records: Records, today: string) {
   const tomorrow = addDays(today, 1);
-  const pending = byPatient(pendingLabs(records).filter(wait => wait.blocks));
+  const pending = byPatient(bookingBlockers(records));
   const patients = new Map(records.patients.map(patient => [patient.id, patient]));
   return records.appointments.flatMap(visit => {
     if (visit.kind !== 'Visit' || visit.status !== 'Scheduled' || (visit.date !== today && visit.date !== tomorrow)) return [];
     const patient = patients.get(visit.patientId);
-    const jobs = pending.get(visit.patientId);
-    return patient && jobs ? [{ visit, patient, jobs }] : [];
+    const holds = pending.get(visit.patientId);
+    return patient && holds ? [{ visit, patient, holds }] : [];
   }).sort((a, b) => slotOrder(a.visit, b.visit));
 }

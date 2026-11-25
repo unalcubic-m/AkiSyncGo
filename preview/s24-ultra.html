@@ -47,6 +47,7 @@
         ['daily-lab', { source: './daily-lab/', route: '#/today' }],
         ['daily-lab-inline', { source: './daily-lab/?variant=inline-check', route: '#/daily-lab?from=responses' }],
         ['lab-returns', { source: './lab-returns/', route: '#/today' }],
+        ['appointment-follow-up', { source: './appointment-follow-up/', route: '#/today' }],
       ]);
       const preview = previews.get(mockup) ?? { source: '../', route: '#/today' };
       const app = new URL(preview.source, location.href);

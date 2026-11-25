@@ -1,0 +1,39 @@
+.today-follow-up-card { margin-top: var(--space-3); }
+.appointment-review { border-color: var(--amber); }
+.today-follow-up-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+.today-follow-up-heading h2 { font-size: var(--text-base); }
+.today-follow-up-icon {
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  color: var(--accent);
+  background: var(--blue-soft);
+  border-radius: var(--radius-sm);
+}
+.today-follow-up-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--border);
+}
+.today-follow-up-copy { display: grid; gap: var(--space-1); }
+.today-follow-up-copy small { overflow-wrap: anywhere; line-height: 1.35; }
+.lab-appointment-replacement { margin-block: var(--space-3); }
+
+.appointment-review .today-follow-up-icon { color: var(--amber); background: var(--amber-soft); }
+.today-follow-up-copy a { color: var(--ink); text-decoration: none; }
+.today-follow-up-copy a:hover { text-decoration: underline; }
+.today-callback-actions { display: flex; flex-wrap: wrap; justify-content: end; }
+.today-callback-actions button { border: 0; background: transparent; }
+.today-callback-actions button:hover:not(:disabled), .today-callback-actions button:focus-visible {
+  background: var(--blue-soft);
+}

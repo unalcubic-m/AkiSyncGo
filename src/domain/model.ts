@@ -66,6 +66,7 @@ const wait = z.object({
 });
 const task = z.object({
   id, patientId: id.nullable(), title, notes: text, completedOn: date.nullable(), blocks: z.boolean().default(false),
+  bookingCallback: z.object({ dismissedReturns: z.record(id, date), bookedVisit: id.optional() }).optional(),
   // Preserve dates from existing records without assigning them to new tasks.
   dueOn: date.nullable().optional(),
 });
@@ -141,6 +142,9 @@ export const recordsSchema = z.object({
   }
   if (records.tasks.some(record => record.blocks && record.patientId === null)) {
     invalid('A task must be linked to a patient to block booking.');
+  }
+  if (records.tasks.some(record => record.bookingCallback && (record.blocks || record.patientId === null))) {
+    invalid('Invalid booking callback.');
   }
   for (const record of records.timeOff) {
     if (record.from > record.through) invalid('Time off must end on or after its start date.');

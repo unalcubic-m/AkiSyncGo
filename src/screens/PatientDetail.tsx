@@ -13,6 +13,7 @@ import { useRouteField } from '../navigation';
 import { copyPatientPhone } from '../platform/clipboard';
 import { NoteEditor } from './PatientForms';
 import { TaskList } from './Tasks';
+import { RequestBookingCallback } from './TodayFollowUp';
 import './patient-profile.css';
 
 type Save = (change: RecordChange) => Promise<void>;
@@ -157,6 +158,7 @@ function FollowUpPanel({ patient, records, href, today, save }: { patient: Patie
   const active = activeAlerts(records, patient.id);
   const alerts = [...active, ...records.alerts.filter(alert => alert.patientId === patient.id && !alert.active)];
   return <div className="patient-profile-follow-up">
+    <RequestBookingCallback records={records} patient={patient} today={today} save={save} />
     <ProfileGroup id="tasks" name={t('Tasks')} icon={ListChecks} count={openTasks(tasks).length}>
       <TaskList tasks={tasks} today={today} save={save} from="patient" history />
       <ButtonLink to={'/tasks/new?from=patient&patient=' + patient.id} icon={Plus} secondary>{t('Add task')}</ButtonLink>

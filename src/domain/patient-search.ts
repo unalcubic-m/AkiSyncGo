@@ -88,6 +88,7 @@ function searchIndex(records: Records) {
       wait.endedOn ?? wait.reviewOn ?? wait.startedOn);
   }
   for (const task of records.tasks) {
+    if (task.bookingCallback) continue;
     if (task.patientId === null) continue;
     add(task.patientId, 'task', task.id, task.title, [task.notes, ...dateFields([task.completedOn, task.dueOn])],
       task.completedOn ?? task.dueOn ?? undefined);

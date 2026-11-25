@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { labAppointmentsAtRisk, returnedLabPatients } from '../src/domain/lab-returns';
+import { appointmentsWithBookingHolds, returnedLabPatients } from '../src/domain/lab-returns';
 import type { Records, Visit, Wait } from '../src/domain/model';
 import { fictionalRecords } from '../src/storage/fixtures';
 
@@ -53,15 +53,18 @@ describe('patients with work returned from lab', () => {
   });
 });
 
-it('warns for today and tomorrow only while a visit has a blocking lab follow-up', () => {
+it('warns for today and tomorrow while any lab or non-lab booking hold is open', () => {
   const profile = 'demo-ada';
   const pending = lab('pending', profile, null);
-  const records: Records = { ...base, waits: [pending, lab('advisory', 'demo-eli', null, { blocks: false })], appointments: [
+  const reply = lab('reply', 'demo-mira', null, { type: 'Patient reply' });
+  const task = { id: 'task', patientId: 'demo-mira', title: 'Confirm referral', notes: '', blocks: true, completedOn: null };
+  const records: Records = { ...base, tasks: [task], waits: [pending, reply, lab('advisory', 'demo-eli', null, { blocks: false })], appointments: [
     visit('tomorrow', profile, tomorrow), visit('today', profile, today), visit('later', profile, '2026-11-25'),
     visit('yesterday', profile, yesterday), visit('advisory', 'demo-eli', tomorrow),
+    visit('reply-visit', 'demo-mira', tomorrow, { start: '11:00', end: '12:00' }),
     visit('cancelled', profile, tomorrow, { status: 'Cancelled' }),
   ] };
-  expect(labAppointmentsAtRisk(records, today).map(({ visit, jobs }) => [visit.id, jobs[0].id]))
-    .toEqual([['today', 'pending'], ['tomorrow', 'pending']]);
-  expect(labAppointmentsAtRisk({ ...records, waits: [{ ...pending, status: 'Resolved', endedOn: today }] }, today)).toEqual([]);
+  expect(appointmentsWithBookingHolds(records, today).map(({ visit, holds }) => [visit.id, holds.map(hold => hold.id)]))
+    .toEqual([['today', ['pending']], ['tomorrow', ['pending']], ['reply-visit', ['reply', 'task']]]);
+  expect(appointmentsWithBookingHolds({ ...records, waits: [], tasks: [{ ...task, completedOn: today }] }, today)).toEqual([]);
 });

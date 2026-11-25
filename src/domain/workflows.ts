@@ -173,7 +173,7 @@ export function responseReviews(records: Records, today: string) {
 }
 
 export function openTasks(tasks: Records['tasks']) {
-  return tasks.filter(task => !task.completedOn);
+  return tasks.filter(task => !task.completedOn && !task.bookingCallback);
 }
 
 export function outstandingVisits(records: Records, now = new Date()) {
