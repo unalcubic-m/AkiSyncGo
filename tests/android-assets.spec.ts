@@ -37,7 +37,7 @@ async function mockAndroidBridge(page: Page) {
         { name: 'AkiSyncRecords', methods: methods(['configuration', 'chooseFolder', 'inspectFolder', 'setFolder', 'readRecords', 'writeRecords', 'setVerifier', 'chooseRecordsFile']) },
         { name: 'AkiSyncCalendar', methods: [...methods([
           'requestAccess', 'events', 'setEventIgnored', 'ignoredEventDetails', 'publishingSettings',
-          'publishingCalendars', 'configurePublishing', 'publishAppointments',
+          'publishingCalendars', 'configurePublishing', 'publishAppointments', 'configureUnavailability', 'publishUnavailability',
         ]), ...listenerMethods] },
         { name: 'AkiSyncClipboard', methods: methods(['copyPatientPhone', 'copyAppointmentTime']) },
         { name: 'App', methods: listenerMethods },
@@ -59,6 +59,7 @@ async function mockAndroidBridge(page: Page) {
         uri?: string; seed?: string; revision?: number; records?: string; verifier?: string; automatic?: boolean; callbackId?: string;
         eventId?: string; ignored?: boolean; eventIds?: string[];
         enabled?: boolean; calendarId?: string; phone?: string; text?: string; visits?: Array<{ id: string; title: string; start: number; end: number }>;
+        from?: number; anonymous?: boolean; preferences?: object; title?: string; blocks?: Array<{ start: number; end: number; allDay: boolean }>;
       }) {
         if (_plugin === 'AkiSyncClipboard' && method === 'copyPatientPhone') {
           put('mock-copied-phone', opts.phone);
@@ -79,13 +80,33 @@ async function mockAndroidBridge(page: Page) {
         }
         const destination = { id: '700', name: 'AkiSync Appointments', account: 'test@example.invalid', key: 'sync:test' };
         const publishing = get('mock-publishing') ?? { enabled: false };
+        const unavailability = get('mock-unavailability-preferences') ?? {
+          closures: true, breaks: true, external: true, buffers: true, workingHoursOnly: true, horizon: 90,
+        };
         const publishingDenied = get('mock-publishing-denied');
-        if (method === 'publishingSettings') return publishing;
+        if (method === 'publishingSettings') return { ...publishing, unavailability };
         if (method === 'publishingCalendars') return publishingDenied ? { status: 'permission' } : { calendars: [destination] };
         if (method === 'configurePublishing') {
           const next = { enabled: opts.enabled, calendar: opts.calendarId === destination.id ? destination : publishing.calendar };
           put('mock-publishing', next);
-          return next;
+          return { ...next, unavailability };
+        }
+        if (method === 'configureUnavailability') {
+          put('mock-unavailability-preferences', opts.preferences);
+          return { ...publishing, unavailability: opts.preferences };
+        }
+        if (method === 'publishUnavailability') {
+          if (!publishing.enabled) return { status: 'paused' };
+          if (publishingDenied) return { status: 'permission' };
+          const snapshot = { title: opts.title, blocks: opts.blocks };
+          put('mock-unavailability-calls', (get('mock-unavailability-calls') ?? 0) + 1);
+          if (JSON.stringify(snapshot) !== JSON.stringify(get('mock-unavailability-published'))) {
+            put('mock-unavailability-payload', opts);
+            put('mock-unavailability-published', snapshot);
+            put('mock-unavailability-writes', (get('mock-unavailability-writes') ?? 0) + 1);
+            window.dispatchEvent(new Event('test-calendar-change'));
+          }
+          return { status: 'saved' };
         }
         if (method === 'publishAppointments') {
           if (!publishing.enabled) return { status: 'paused' };
@@ -99,16 +120,27 @@ async function mockAndroidBridge(page: Page) {
         }
         if (['events', 'setEventIgnored', 'ignoredEventDetails'].includes(method)) {
           const ignored: string[] = get('mock-ignored-calendar-events') ?? [];
-          const events: { id: string; eventId?: string; title: string; calendar: string; calendarId?: string }[] =
+          const events: { id: string; eventId?: string; title: string; calendar: string; calendarId?: string;
+            begin: number; end: number; allDay: boolean }[] =
             (get('mock-calendar-events') ?? []).filter((event: { calendarId?: string }) => !publishing.calendar
               || event.calendarId !== publishing.calendar.id);
-          if (method === 'events') return get('mock-calendar-access') ? {
-            access: 'granted',
-            events: events.map(event => {
-              const eventId = event.eventId ?? event.id.split(':', 1)[0];
-              return { ...event, eventId, ignored: ignored.includes(eventId) };
-            }),
-          } : { access: 'prompt' };
+          if (method === 'events') {
+            if (opts.anonymous) {
+              const failure = get('mock-unavailability-read-failure');
+              if (failure?.mode === 'denied') return { access: 'denied' };
+              if (failure?.mode === 'partial' && opts.from! >= failure.from) return { access: 'granted' };
+              if (failure?.mode === 'error') throw new Error('Calendar read failed.');
+            }
+            return get('mock-calendar-access') ? {
+              access: 'granted',
+              events: events.map(event => {
+                const eventId = event.eventId ?? event.id.split(':', 1)[0];
+                return opts.anonymous
+                  ? { begin: event.begin, end: event.end, allDay: event.allDay, ignored: ignored.includes(eventId) }
+                  : { ...event, eventId, ignored: ignored.includes(eventId) };
+              }),
+            } : { access: 'prompt' };
+          }
           if (method === 'setEventIgnored') {
             put('mock-ignored-calendar-events', opts.ignored ? [...new Set([...ignored, opts.eventId])] : ignored.filter(id => id !== opts.eventId));
             return;
@@ -161,6 +193,160 @@ test('Android notification confirmation goes back to the screen the user was on'
   await shortcut.click();
   await expect(page.getByText('Bugün kontrol edildi', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Bekleyen laboratuvar işleri' })).toBeVisible();
+});
+
+test('Android publishes anonymous unavailable times and reconciles source changes, preferences, and pause', async ({ page }) => {
+  const unexpected = await mockAndroidBridge(page);
+  const date = '2026-11-23';
+  const future = '2027-01-22';
+  const ts = (day: string, time: string) => Date.parse(`${day}T${time}:00+03:00`);
+  const interval = (day: string, start: string, end: string) => ({ start: ts(day, start), end: ts(day, end), allDay: false });
+  const event = (eventId: string, day: string, start: string, end: string, calendarId = '701') => ({
+    id: `${eventId}:${day}:${start}`, eventId, begin: ts(day, start), end: ts(day, end), allDay: false, calendarId,
+    title: 'Private meeting title', calendar: 'Private source calendar', account: 'private-source@example.invalid',
+    description: 'Private meeting notes', location: 'Private office', organizer: 'private-organizer@example.invalid',
+    attendees: ['private-attendee@example.invalid'], link: 'https://example.invalid/private-meeting',
+  });
+  const records = fictionalRecords(new Date('2026-11-23T08:00:00+03:00'));
+  records.appointments = records.appointments.filter(appointment => ['demo-1', 'demo-4', 'demo-block'].includes(appointment.id))
+    .map(appointment => {
+      if (appointment.id === 'demo-1') return { ...appointment, start: '12:45', end: '13:15', ignoredCalendarEventIds: ['7011:2026-11-23:13:30'] };
+      if (appointment.id === 'demo-4') return { ...appointment, date: '2036-05-02' };
+      return { ...appointment, start: '13:30', end: '15:00', title: 'Private closure title' };
+    });
+  records.breaks = [{ id: 'fictional-break', title: 'Private break title', from: date,
+    hours: { start: '12:00', end: '13:00' }, repeat: null, changes: [] }];
+  const external = event('7011', date, '13:30', '14:00');
+  const distant = event('7012', future, '16:00', '18:00');
+  const destinationEvent = event('7001', date, '09:00', '10:00', '700');
+  await page.addInitScript(({ records, events }) => {
+    const folder = 'Documents/AkiSync-publishing-test';
+    if (localStorage.getItem('mock-folder')) return;
+    localStorage.setItem('mock-folder', JSON.stringify(folder));
+    localStorage.setItem('mock-sqlite-' + folder, JSON.stringify({ revision: 1, records: JSON.stringify(records) }));
+    localStorage.setItem('akisync-language', 'en');
+    localStorage.setItem('mock-calendar-access', 'true');
+    localStorage.setItem('mock-calendar-events', JSON.stringify(events));
+    localStorage.setItem('mock-publishing', JSON.stringify({ enabled: true, calendar: {
+      id: '700', name: 'AkiSync Appointments', account: 'test@example.invalid', key: 'sync:test',
+    } }));
+  }, { records, events: [external, distant, destinationEvent] });
+  await page.context().setOffline(true);
+  await page.goto('https://localhost/#/data');
+  const stored = (key: string) => page.evaluate(name => JSON.parse(localStorage.getItem(name) ?? 'null'), key);
+  const published = () => stored('mock-unavailability-published');
+  const blocks = () => expect.poll(async () => (await published())?.blocks);
+  const merged = interval(date, '12:00', '15:00');
+  const lunch = interval(date, '12:00', '13:00');
+  const closure = interval(date, '13:30', '15:00');
+  const distantBlock = interval(future, '15:00', '17:00');
+  await blocks().toEqual([merged, distantBlock]);
+  expect((await published()).title).toBe('Unavailable for appointments');
+  expect(JSON.stringify(await stored('mock-unavailability-payload'))).not.toMatch(/Private|private-|7011|7012|7001/);
+  await expect.poll(() => stored('mock-published-visits')).toEqual([
+    { id: 'demo-1', title: 'MİRA ARDEN', start: ts(date, '12:45'), end: ts(date, '13:15') },
+    { id: 'demo-4', title: 'ELİ DEMİR', start: ts('2036-05-02', '11:30'), end: ts('2036-05-02', '12:00') },
+  ]);
+
+  const trigger = page.getByText('Publish unavailable times', { exact: true });
+  await trigger.click();
+  const horizon = page.getByLabel('Recurring and external event publishing horizon');
+  const publishExternal = page.getByRole('checkbox', { name: 'Publish anonymous external calendar events' });
+  const publishBuffer = page.getByRole('checkbox', { name: 'Include external calendar event buffers' });
+  const workingHoursOnly = page.getByRole('checkbox', { name: 'Restrict external calendar restrictions to clinical working hours' });
+  await expect(horizon).toHaveValue('90');
+  await expect(publishExternal).toBeChecked();
+  await expect(publishBuffer).toBeChecked();
+  await expect(workingHoursOnly).toBeChecked();
+
+  const calls = await stored('mock-unavailability-calls');
+  const writes = await stored('mock-unavailability-writes');
+  await page.evaluate(() => window.dispatchEvent(new Event('test-calendar-change')));
+  await expect.poll(() => stored('mock-unavailability-calls')).toBeGreaterThan(calls);
+  expect(await stored('mock-unavailability-writes')).toBe(writes);
+
+  await horizon.selectOption('30');
+  await blocks().toEqual([merged]);
+  await horizon.selectOption('365');
+  await blocks().toEqual([merged, distantBlock]);
+  const readFailure = page.getByRole('alert').filter({ hasText: 'Previously published unavailable times were kept.' });
+  for (const mode of ['denied', 'error', 'partial']) {
+    await page.evaluate(failure => {
+      localStorage.setItem('mock-unavailability-read-failure', JSON.stringify(failure));
+      localStorage.removeItem('mock-published-visits');
+      window.dispatchEvent(new Event('test-foreground'));
+    }, { mode, from: ts('2027-03-01', '00:00') });
+    await expect(readFailure).toBeVisible();
+    expect((await published()).blocks).toEqual([merged, distantBlock]);
+    await expect.poll(() => stored('mock-published-visits')).toHaveLength(2);
+    await page.evaluate(() => {
+      localStorage.removeItem('mock-unavailability-read-failure');
+      window.dispatchEvent(new Event('test-calendar-change'));
+    });
+    await expect(readFailure).toBeHidden();
+  }
+
+  await publishBuffer.uncheck();
+  await blocks().toEqual([lunch, closure, interval(future, '16:00', '17:00')]);
+  await publishExternal.uncheck();
+  await blocks().toEqual([lunch, closure]);
+  await expect(publishBuffer).toBeDisabled();
+  await expect(workingHoursOnly).toBeDisabled();
+  await page.getByRole('button', { name: 'Pause publishing' }).click();
+  const publishClosures = page.getByRole('checkbox', { name: 'Publish manual appointment closures' });
+  await publishClosures.uncheck();
+  await page.reload();
+  await trigger.click();
+  await expect(publishClosures).not.toBeChecked();
+  await expect(publishBuffer).not.toBeChecked();
+  await expect(horizon).toHaveValue('365');
+  expect((await published()).blocks).toEqual([lunch, closure]);
+  await page.getByRole('button', { name: 'Resume publishing' }).click();
+  await blocks().toEqual([lunch]);
+
+  await publishExternal.check();
+  await expect(publishBuffer).toBeEnabled();
+  await expect(publishBuffer).not.toBeChecked();
+  await blocks().toEqual([lunch, interval(date, '13:30', '14:00'), interval(future, '16:00', '17:00')]);
+  const updateEvents = (events: typeof external[]) => page.evaluate(data => {
+    localStorage.setItem('mock-calendar-events', JSON.stringify(data));
+    window.dispatchEvent(new Event('test-calendar-change'));
+  }, events);
+  await updateEvents([destinationEvent]);
+  await blocks().toEqual([lunch]);
+  await updateEvents([destinationEvent, event('7013', date, '14:00', '15:00')]);
+  await blocks().toEqual([lunch, interval(date, '14:00', '15:00')]);
+  await updateEvents([destinationEvent, event('7013', date, '15:00', '16:00')]);
+  await blocks().toEqual([lunch, interval(date, '15:00', '16:00')]);
+
+  await page.goto(`https://localhost/#/calendar?date=${date}`);
+  await page.getByRole('button', { name: 'Ignore Private meeting title for all bookings' }).click();
+  await blocks().toEqual([lunch]);
+  await page.getByRole('button', { name: 'Restore Private meeting title for all bookings' }).click();
+  await blocks().toEqual([lunch, interval(date, '15:00', '16:00')]);
+
+  await page.goto('https://localhost/#/availability');
+  const dateHours = page.getByRole('heading', { name: 'Hours for a specific date' }).locator('../..');
+  await dateHours.getByRole('button', { name: 'Override a date' }).click();
+  await dateHours.getByLabel('Date', { exact: true }).fill(date);
+  await dateHours.getByLabel('From').fill('15:30');
+  await dateHours.getByLabel('Until').fill('17:00');
+  await dateHours.getByRole('button', { name: 'Save date hours' }).click();
+  await blocks().toEqual([lunch, interval(date, '15:30', '16:00')]);
+
+  await page.goto('https://localhost/#/data');
+  await trigger.click();
+  await horizon.selectOption('30');
+  const boundary = '2026-12-23';
+  await updateEvents([event('7014', boundary, '10:00', '11:00')]);
+  await blocks().toEqual([lunch]);
+  await page.clock.setFixedTime(new Date('2026-11-24T08:00:00+03:00'));
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await blocks().toEqual([lunch, interval(boundary, '10:00', '11:00')]);
+
+  await page.getByLabel('Language').selectOption('tr');
+  await expect.poll(async () => (await published())?.title).toBe('Randevuya Kapalı');
+  expect(unexpected).toEqual([]);
 });
 
 test('Android shows the booking warnings and keeps a callback open when Ara copies the number', async ({ page }) => {
