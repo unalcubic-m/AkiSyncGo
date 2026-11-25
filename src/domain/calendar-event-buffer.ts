@@ -10,7 +10,7 @@ export function eventBufferFor(records: Records) {
   return records.calendarEventBuffer ?? defaultEventBuffer;
 }
 
-export function calendarEventsWithBuffer(events: DeviceCalendarEvent[] | undefined, minutes: number) {
+export function calendarEventsWithBuffer<T extends Pick<DeviceCalendarEvent, 'begin'>>(events: T[] | undefined, minutes: number) {
   if (!events || !minutes) return events;
   return events.map(event => ({ ...event, begin: event.begin - minutes * 60_000 }));
 }

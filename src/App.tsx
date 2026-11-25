@@ -75,7 +75,7 @@ export default function App({ repository, native = false, previewStatus = 'Ficti
   const [now, setNow] = useState(() => new Date());
   const today = localDate(now);
   const calendarAccess = useDeviceCalendarAccess(native && !!records);
-  const publishing = useGoogleCalendarPublishing(native, records, today);
+  const publishing = useGoogleCalendarPublishing(native, records, today, calendarAccess);
   const upcoming = useMemo(() => records ? upcomingVisits(records, today, now) : [], [records, today, now]);
   const outstanding = useMemo(() => records ? outstandingVisits(records, now) : [], [records, now]);
   const deviceEvents = useUpcomingCalendarEvents(calendarAccess, upcoming);
@@ -315,7 +315,7 @@ export default function App({ repository, native = false, previewStatus = 'Ficti
       <div className="desktop-status device-status"><ShieldCheck aria-hidden />{deviceStatus}</div>
     </aside></>}
     <main id="main-content" ref={content} tabIndex={-1} className="main"><div className="content">
-      {publishing.problem && (section === 'today' || section === 'calendar') &&
+      {(publishing.problem || publishing.unavailabilityProblem) && (section === 'today' || section === 'calendar') &&
         <p role="status"><a href={path('/data')}>{t('Calendar publishing needs attention')}</a></p>}
       {currentConflicts.length > 0 && (section === 'today' || section === 'calendar') &&
         <CalendarConflictBanner count={currentConflicts.length} from={section} />}

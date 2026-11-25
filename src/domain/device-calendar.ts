@@ -12,6 +12,7 @@ export type DeviceCalendarEvent = {
   end: number;
   allDay: boolean;
 };
+export type DeviceCalendarTiming = Pick<DeviceCalendarEvent, 'begin' | 'end' | 'ignored' | 'allDay'>;
 
 export function localTimestamp(date: string, time = '00:00') {
   const day = parseDate(date);
@@ -23,7 +24,7 @@ export function calendarRange(from: string, through: string) {
   return { from: localTimestamp(from), until: localTimestamp(addDays(through, 1)) };
 }
 
-export function normalizeCalendarEvent(event: DeviceCalendarEvent): DeviceCalendarEvent {
+export function normalizeCalendarEvent<T extends DeviceCalendarTiming>(event: T): T {
   if (!event.allDay) return event;
   const day = (timestamp: number) => new Date(timestamp).toISOString().slice(0, 10);
   return { ...event, begin: localTimestamp(day(event.begin)), end: localTimestamp(day(event.end)) };
