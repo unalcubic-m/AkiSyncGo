@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name" translatable="false">AkiSync Go</string>
+    <string name="package_name">com.akisync.offline</string>
+    <string name="custom_url_scheme">com.akisync.offline</string>
+    <string name="availability_reminder_title">Appointment opening</string>
+    <string name="availability_reminder_text">%1$d minutes free on %2$s, your next working day.</string>
+    <string name="daily_lab_reminder_title">Daily Laboratory Check</string>
+    <string name="daily_lab_reminder_text">Check whether any laboratory work has arrived.</string>
+</resources>

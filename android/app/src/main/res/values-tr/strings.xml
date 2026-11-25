@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="availability_reminder_title">Randevu boşluğu</string>
+    <string name="availability_reminder_text">Sonraki çalışma gününüzde %1$d dakika boşluk var (%2$s).</string>
+    <string name="daily_lab_reminder_title">Günlük laboratuvar kontrolü</string>
+    <string name="daily_lab_reminder_text">Laboratuvar işlerinin ulaşıp ulaşmadığını kontrol et.</string>
+</resources>

@@ -1,0 +1,56 @@
+.booking-duration-picker { min-inline-size: 0; }
+.booking-duration-presets {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  padding: 2px 2px var(--space-1);
+}
+.booking-duration-presets .button {
+  flex: none;
+  min-inline-size: 4.4rem;
+  min-block-size: var(--touch);
+  padding-inline: var(--space-3);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+.booking-duration-presets .button[aria-pressed='true'] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--blue-soft);
+}
+.booking-duration-custom { display: flex; justify-content: end; margin-block-start: var(--space-1); }
+.booking-duration-custom .text-button { background: transparent; }
+.booking-duration-wheel-labels, .booking-duration-wheels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  text-align: center;
+}
+.booking-duration-wheel-labels {
+  margin-block-end: var(--space-2);
+  color: var(--muted-strong);
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+.booking-duration-wheels { position: relative; --wheel-row-height: 2.75rem; }
+.booking-duration-wheels::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: calc(2 * var(--wheel-row-height));
+  block-size: var(--wheel-row-height);
+  border-radius: var(--radius-sm);
+  background: var(--blue-soft);
+  pointer-events: none;
+}
+.duration-settings-options { display: grid; gap: var(--space-1); }
+.duration-settings-option, .duration-settings-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-2);
+  align-items: center;
+}
+.duration-settings-option + .duration-settings-option { border-block-start: 1px solid var(--border); }
+.duration-settings-add { align-items: end; }
+.duration-settings-add input { min-width: 0; }

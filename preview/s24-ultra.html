@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AkiSync Go · Galaxy S24 Ultra</title>
+    <style>
+      :root {
+        --screen-width: 384px;
+        --screen-height: 832px;
+        background: #e5e9ef;
+      }
+
+      .phone {
+        position: fixed;
+        inset-block-start: 50%;
+        inset-inline-start: 50%;
+        transform: translate(-50%, -50%) scale(var(--preview-scale, 1));
+        overflow: hidden;
+        border: 6px solid #252934;
+        border-radius: 18px;
+        background: #f5f7f9;
+        box-shadow: 0 0 0 1px #737985, 0 18px 48px #26324730;
+      }
+
+      iframe {
+        display: block;
+        width: var(--screen-width);
+        height: var(--screen-height);
+        border: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="phone">
+      <iframe title="AkiSync Go Galaxy S24 Ultra önizlemesi"></iframe>
+    </main>
+    <script type="module">
+      const phone = document.querySelector('.phone');
+      const screen = document.querySelector('iframe');
+      const params = new URLSearchParams(location.search);
+      const mockup = params.get('mockup');
+      const previews = new Map([
+        ['appointment-outcomes', { source: './appointment-outcomes/', route: '#/today' }],
+        ['compact-appointment', { source: './appointment-outcomes/?variant=compact', route: '#/appointments/mock-later?from=today' }],
+        ['patient-profile', { source: './patient-profile/', route: '#/patients/demo-eli' }],
+        ['daily-lab', { source: './daily-lab/', route: '#/today' }],
+        ['daily-lab-inline', { source: './daily-lab/?variant=inline-check', route: '#/daily-lab?from=responses' }],
+      ]);
+      const preview = previews.get(mockup) ?? { source: '../', route: '#/today' };
+      const app = new URL(preview.source, location.href);
+      const optimumDemo = mockup === 'compact-appointment' && params.get('scenario') === 'optimum';
+      if (optimumDemo) app.searchParams.set('scenario', 'optimum');
+      const defaultRoute = optimumDemo ? '#/appointments/new?from=today' : preview.route;
+      const currentRoute = () => location.hash || defaultRoute;
+
+      function fitPhone() {
+        const scale = Math.min(1, (innerWidth - 24) / phone.offsetWidth, (innerHeight - 24) / phone.offsetHeight);
+        phone.style.setProperty('--preview-scale', String(Math.max(0, scale)));
+      }
+
+      window.addEventListener('resize', fitPhone);
+      fitPhone();
+
+      // Keep the outer URL shareable without creating a second history entry for each app route.
+      screen.addEventListener('load', () => {
+        const appWindow = screen.contentWindow;
+        appWindow.addEventListener('hashchange', () => {
+          if (location.hash !== appWindow.location.hash) {
+            history.replaceState(null, '', appWindow.location.hash || defaultRoute);
+          }
+        });
+      });
+      window.addEventListener('hashchange', () => {
+        if (screen.contentWindow.location.hash !== currentRoute()) {
+          screen.contentWindow.location.replace(new URL(currentRoute(), app));
+        }
+      });
+      app.hash = currentRoute();
+      screen.src = app.href;
+    </script>
+  </body>
+</html>
