@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { jumpToCalendarDate } from './calendar';
 import { chooseBookingPatient, chooseBookingStart, dismissBookingOffer, expectBookingTime, openTimePicker } from './booking';
+import type { Wait } from '../src/domain/model';
+import { fictionalRecords } from '../src/storage/fixtures';
 
 async function mockAndroidBridge(page: Page) {
   await page.clock.setFixedTime(new Date('2026-11-23T08:00:00+03:00'));
@@ -159,6 +161,76 @@ test('Android notification confirmation goes back to the screen the user was on'
   await shortcut.click();
   await expect(page.getByText('Bugün kontrol edildi', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Bekleyen laboratuvar işleri' })).toBeVisible();
+});
+
+test('Android shows returned lab work and removes the appointment warning when its last hold clears', async ({ page }) => {
+  const unexpected = await mockAndroidBridge(page);
+  await page.setViewportSize({ width: 384, height: 832 });
+  const records = fictionalRecords(new Date(2026, 10, 23, 8));
+  const lab = (id: string, patientId: string, title: string, endedOn: string | null, blocks = true): Wait => ({
+    id, patientId, title, endedOn, blocks, type: 'Laboratory return', status: endedOn ? 'Resolved' : 'Waiting',
+    startedOn: '2026-11-21', reviewOn: null, notes: '',
+  });
+  records.waits.push(
+    lab('returned-manual', 'demo-ada', 'Seramik kron', '2026-11-22', false),
+    lab('returned-blocked', 'demo-jonah', 'Gece plağı', '2026-11-22'),
+    lab('returned-booked', 'demo-eli', 'Zirkonyum prova', '2026-11-22'),
+    lab('pending-nora', 'demo-nora', 'Köprü provası', null),
+    lab('pending-mira', 'demo-mira', 'Kron provası', null),
+  );
+  records.appointments = records.appointments.filter(visit => ['demo-1', 'demo-4', 'demo-5'].includes(visit.id))
+    .map(visit => visit.id === 'demo-4' ? visit : {
+      ...visit, date: '2026-11-24', start: visit.id === 'demo-1' ? '15:00' : '14:00', end: visit.id === 'demo-1' ? '16:00' : '15:00',
+    });
+  await page.addInitScript(data => {
+    const folder = 'Documents/AkiSync-lab-test';
+    if (localStorage.getItem('mock-folder')) return;
+    localStorage.setItem('mock-folder', JSON.stringify(folder));
+    localStorage.setItem('mock-sqlite-' + folder, JSON.stringify({ revision: 1, records: JSON.stringify(data) }));
+  }, records);
+  await page.context().setOffline(true);
+  await page.goto('https://localhost/#/today');
+
+  const warning = page.getByRole('region', { name: 'Yarınki randevular' });
+  await expect(warning.getByRole('listitem')).toHaveCount(2);
+  await warning.getByRole('listitem').filter({ hasText: 'MİRA ARDEN' }).getByRole('link', { name: 'Randevuyu aç' }).click();
+  await page.getByText('Randevu sonucu', { exact: true }).click();
+  await page.getByRole('button', { name: 'Diğer sonuçlar', exact: true }).click();
+  await page.getByRole('button', { name: 'İptal edildi', exact: true }).click();
+  await expect(page.getByRole('link', { name: 'Bu saate hasta planla' }))
+    .toHaveAttribute('href', '#/appointments/new?from=today&date=2026-11-24&start=15%3A00&end=16%3A00');
+  await page.getByRole('link', { name: 'Geri', exact: true }).click();
+  await expect(warning.getByRole('listitem')).toHaveCount(1);
+
+  await page.getByRole('link', { name: /^Günlük laboratuvar kontrolü/ }).click();
+  await expect(page.locator('.lab-confirmed')).toHaveCount(0);
+  const shortcut = page.getByRole('link', { name: 'Laboratuvardan dönen işler', exact: true });
+  await shortcut.click();
+  const flask = page.getByRole('button', { name: 'Laboratuvardan işi dönen hastalar' });
+  await expect(flask).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('region', { name: 'Randevuya hazır', exact: true }).getByText('ADA KESTREL')).toBeVisible();
+  const blocked = page.getByRole('region', { name: 'Randevu beklemede' });
+  await expect(blocked.getByText('JONAH LAKE')).toBeVisible();
+  await blocked.getByRole('link', { name: 'Engelleri gör' }).click();
+  await expect(page.getByRole('heading', { name: 'Confirm availability' })).toBeVisible();
+  await page.getByRole('link', { name: 'Geri', exact: true }).click();
+  await expect(flask).toHaveAttribute('aria-pressed', 'true');
+  const booked = page.locator('.returned-booked');
+  await expect(booked.getByRole('link', { name: 'Randevuyu aç' })).toBeHidden();
+  await booked.getByText('Randevusu olanlar').click();
+  await booked.getByRole('link', { name: 'Randevuyu aç' }).click();
+  await expect(page.getByRole('heading', { name: 'Progress check' })).toBeVisible();
+  await page.getByRole('link', { name: 'Geri', exact: true }).click();
+  await expect(booked.getByRole('link', { name: 'Randevuyu aç' })).toBeVisible();
+  await page.goBack();
+  await expect(shortcut).toBeVisible();
+
+  await page.locator('.lab-case').filter({ hasText: 'NORA VALE' }).getByRole('button').click();
+  await expect(page.locator('.lab-confirmed')).toBeVisible();
+  await page.getByRole('navigation').getByRole('link', { name: 'Bugün', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Bugün', exact: true })).toBeVisible();
+  await expect(warning).toHaveCount(0);
+  expect(unexpected).toEqual([]);
 });
 
 test('Android assets choose a folder offline, save readable records and switch the app lock independently', async ({ page }) => {

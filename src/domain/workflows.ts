@@ -8,7 +8,7 @@ import { localOverlapKey, localOverlaps, occupiesSchedule, pruneScheduleOverlapI
 
 const priorityBoost = { Normal: 0, Urgent: 60, 'Extra urgent': 180 };
 const severityOrder = { Critical: 0, Caution: 1, Info: 2 };
-const slotOrder = (a: Slot, b: Slot) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start);
+export const slotOrder = (a: Slot, b: Slot) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start);
 const nowSlot = (now: Date) => ({
   date: localDate(now),
   start: clockTime(now.getHours() * 60 + now.getMinutes()),
@@ -124,17 +124,17 @@ export function freeAppointmentWindows(records: Records, date: string, { now, ex
 
 export function upcomingVisits(records: Records, today: string, now = new Date()) {
   const current = nowSlot(now);
-  return records.appointments.filter(item => item.kind === 'Visit' && item.status === 'Scheduled'
+  return records.appointments.filter((item): item is Visit => item.kind === 'Visit' && item.status === 'Scheduled'
     && item.date >= today && (item.date > current.date || (item.date === current.date && item.end > current.start)))
     .sort(slotOrder);
 }
 
-function bookingBlockers(records: Records) {
+export function bookingBlockers(records: Records) {
   return [
     ...records.waits.filter(wait => wait.status === 'Waiting' && wait.blocks)
-      .map(({ id, patientId, title }) => ({ patientId, title, code: `wait:${id}`, kind: 'Blocking waits' as const })),
+      .map(({ id, patientId, title }) => ({ id, patientId, title, code: `wait:${id}`, kind: 'Blocking waits' as const })),
     ...openTasks(records.tasks).filter(task => task.blocks && task.patientId !== null)
-      .map(({ id, patientId, title }) => ({ patientId, title, code: `task:${id}`, kind: 'Blocking tasks' as const })),
+      .map(({ id, patientId, title }) => ({ id, patientId, title, code: `task:${id}`, kind: 'Blocking tasks' as const })),
   ];
 }
 

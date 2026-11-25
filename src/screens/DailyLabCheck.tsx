@@ -4,6 +4,7 @@ import { Field, newId, PageHeader, path, Pill, value } from '../components/ui';
 import { confirmLab, confirmPatientLab, confirmedLabs, createLabPatient, exactLabPatientMatches,
   labResultToday, labRoute, pendingLabs } from '../domain/daily-lab';
 import { titleDate } from '../domain/dates';
+import { labReturnsRoute } from '../domain/lab-returns';
 import type { Patient, RecordChange, Records, Wait } from '../domain/model';
 import type { LabResult } from '../domain/notification-settings';
 import { searchBookingPatients } from '../domain/workflows';
@@ -176,6 +177,10 @@ export default function DailyLabCheck({ records, today, back, save, onClose }: {
         <strong>{doneLabel(confirmed.length)}</strong><CaretDown size={17} aria-hidden /></summary>
       <ul className="lab-list">{confirmed.map(wait => <CaseRow key={wait.id} wait={wait} patient={patientFor(wait)} />)}</ul>
     </details>}
+    <a className="panel lab-widget" href={path(labReturnsRoute)}>
+      <span className="lab-icon lab-icon-blue"><Flask size={21} aria-hidden /></span>
+      <strong>{t('Jobs returned from lab')}</strong><CaretRight size={16} aria-hidden />
+    </a>
     {error && <p className="form-error lab-error" role="alert">{error}</p>}
     {!checked && <div className="lab-actions">
       {!pending.length && <button className="button" type="button" disabled={busy} onClick={() => void run(() => onClose('finished'))}>{t('Finish check')}</button>}

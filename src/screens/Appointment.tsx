@@ -1,5 +1,5 @@
 import { errorMessage, getLocale, t } from '../i18n';
-import { ArrowLeft, CaretDown, CaretLeft, CaretRight, Check, CopySimple, Notebook, PencilSimple, WarningCircle } from '@phosphor-icons/react';
+import { ArrowLeft, CalendarPlus, CaretDown, CaretLeft, CaretRight, Check, CopySimple, Notebook, PencilSimple, WarningCircle } from '@phosphor-icons/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DeviceCalendarAccess } from '../components/DeviceCalendarAccess';
 import { AlertBadge, ButtonLink, Field, FormWarning, navigate, newId, Options, PageHeader, path, Pill, RecordForm, Section, value } from '../components/ui';
@@ -9,7 +9,8 @@ import { findBookingOptions } from '../domain/booking-optimum';
 import { gridBookingSlotsOnDate } from '../domain/booking-time-grid';
 import { calendarBufferConflicts, calendarEventsWithBuffer, eventBufferFor } from '../domain/calendar-event-buffer';
 import { addDays, formatDate, localDate, minutes, titleDate } from '../domain/dates';
-import { calendarConflicts, calendarEventLabel, type DeviceCalendarEvent } from '../domain/device-calendar';
+import { calendarConflicts, calendarEventLabel, localTimestamp, type DeviceCalendarEvent } from '../domain/device-calendar';
+import { labReturnsRoute, labReturnsView } from '../domain/lab-returns';
 import { type Appointment, type RecordChange, type Records, type Slot, visitStatuses } from '../domain/model';
 import type { ScheduleConflict } from '../domain/schedule-conflicts';
 import {
@@ -424,6 +425,7 @@ export function AppointmentForm({ records, item, selectedPatient, selectedDate, 
         else if (back.startsWith('/availability')) params.set('from', 'availability');
         else if (back === '/today') params.set('from', 'today');
         else if (back === '/planning') params.set('from', 'planning');
+        else if (back === labReturnsRoute) params.set('from', labReturnsView);
         else if (back === '/attention') params.set('from', 'attention');
         navigate('/appointments/' + next.id + (params.size ? '?' + params : ''));
       }}>
@@ -582,13 +584,17 @@ export function AppointmentForm({ records, item, selectedPatient, selectedDate, 
   return <><PageHeader title={title} back={back} />{form}</>;
 }
 
-export function AppointmentDetail({ item, records, now, back, editLink, followUpLink, conflicts, save, outcomePending, remove, onDeleted }: {
+export function AppointmentDetail({ item, records, now, back, editLink, followUpLink, conflicts, save, outcomePending, fromLabWarning, remove, onDeleted }: {
   item: Appointment; records: Records; now: Date; back: string; editLink: string; followUpLink: string; conflicts: ScheduleConflict[]; save: (change: RecordChange) => Promise<void>;
-  outcomePending: boolean; remove: () => Promise<void>; onDeleted: () => void;
+  outcomePending: boolean; fromLabWarning?: boolean; remove: () => Promise<void>; onDeleted: () => void;
 }) {
   const patient = records.patients.find(entry => entry.id === item.patientId);
   const linked = records.notes.filter(note => note.appointmentId === item.id);
   const alerts = patient ? activeAlerts(records, patient.id) : [];
+  const replacement = fromLabWarning && item.kind === 'Visit' && item.status === 'Cancelled'
+    && localTimestamp(item.date, item.start) > now.getTime()
+    ? '/appointments/new?' + new URLSearchParams({ from: 'today', date: item.date, start: item.start, end: item.end })
+    : undefined;
   return <>
     <PageHeader title={item.title} subtitle={titleDate(item.date)} back={back}
       action={<div className="appointment-detail-actions">
@@ -608,6 +614,9 @@ export function AppointmentDetail({ item, records, now, back, editLink, followUp
       {item.notes && <p className="preserve"><strong>{t(item.kind === 'Block' ? 'Notes' : 'Preparation notes')}</strong> {item.notes}</p>}
     </div>
     {item.kind === 'Visit' && <AppointmentOutcome visit={item} now={now} followUpLink={followUpLink} save={save} />}
+    {replacement && <div className="lab-appointment-replacement"><ButtonLink to={replacement} icon={CalendarPlus} secondary>
+      {t('Book a patient at this time')}
+    </ButtonLink></div>}
     {!!conflicts.length && <Section title={t('Scheduling conflicts')}>
       <ScheduleConflictList records={records} conflicts={conflicts} save={save} />
     </Section>}

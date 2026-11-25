@@ -6,7 +6,7 @@ import { GoogleCalendarPublishing, useGoogleCalendarPublishing } from './compone
 import { ButtonLink, Empty, PageHeader, path } from './components/ui';
 import { localDate } from './domain/dates';
 import { labFollowUpsRoute, labResultMessage, labRoute } from './domain/daily-lab';
-import { trackLabClearance } from './domain/lab-planning';
+import { labReturnsRoute, labReturnsView } from './domain/lab-returns';
 import { z } from 'zod';
 import { slotSchema, type Patient, type RecordChange, type Records } from './domain/model';
 import { conflictAppointmentIds, pruneScheduleOverlapIgnores, scheduleConflicts } from './domain/schedule-conflicts';
@@ -44,7 +44,7 @@ const isoDate = z.iso.date();
 const workReturnRoutes = new Map([
   ['work', '/work'], ['tasks', '/work?view=tasks'], ['responses', '/work?view=responses'],
   ['today', '/today'], ['attention', '/attention'],
-  ['patient-search', '/patients'],
+  ['patient-search', '/patients'], [labReturnsView, labReturnsRoute],
 ]);
 
 export function Brand() {
@@ -114,15 +114,14 @@ export default function App({ repository, native = false, previewStatus = 'Ficti
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  async function save(change: RecordChange, { offerBooking = true, restoring = false } = {}) {
+  async function save(change: RecordChange, { offerBooking = true } = {}) {
     if (writing.current) throw new Error('A change is already saving. Try again in a moment.');
     writing.current = true;
     try {
       let previous: Records | undefined;
       const saved = await repository.update(current => {
         previous = current;
-        const next = pruneScheduleOverlapIgnores(change(current));
-        return restoring ? next : trackLabClearance(current, next, localDate());
+        return pruneScheduleOverlapIgnores(change(current));
       });
       setRecords(saved);
       const newlyReady = offerBooking && previous ? newlyBookablePatients(previous, saved, localDate()) : [];
@@ -144,11 +143,13 @@ export default function App({ repository, native = false, previewStatus = 'Ficti
     const outcomeReturn = from ? outcomeReturnRoutes.get(from) : undefined;
     const appointmentBack = outcomeReturn ?? (from === 'patient-search' ? '/patients' : from === 'today' ? '/today' : from === 'calendar' ? calendarBack
       : from === 'availability' ? '/availability' + (calendarDay ? '?date=' + calendarDay : '')
-      : from === 'planning' ? '/planning' : from === 'attention' ? '/attention' : from === 'calendar-conflicts' ? '/calendar-conflicts'
+      : from === 'planning' ? '/planning' : from === labReturnsView ? labReturnsRoute
+      : from === 'attention' ? '/attention' : from === 'calendar-conflicts' ? '/calendar-conflicts'
       : from === 'ignored-calendar-events' ? '/ignored-calendar-events'
       : profileBack ? '/patients/' + profileBack : calendarBack);
     const returnTo = from ? workReturnRoutes.get(from) : undefined;
-    const originQuery = from ? '?from=' + encodeURIComponent(from) : '';
+    const fromLabWarning = from === 'today' && params.get('lab-warning') === '1';
+    const originQuery = from ? '?from=' + encodeURIComponent(from) + (fromLabWarning ? '&lab-warning=1' : '') : '';
     switch (section) {
       case 'today': return <Today records={records} today={today} now={now} outstanding={outstanding} calendarAccess={calendarAccess} save={save} />;
       case 'daily-lab': {
@@ -176,7 +177,9 @@ export default function App({ repository, native = false, previewStatus = 'Ficti
         if (!sub) {
           const noteId = params.get('note');
           const focusedNote = noteId ? records.notes.find(note => note.id === noteId && note.patientId === patient.id)?.id : undefined;
-          return <PatientDetail records={records} upcoming={upcoming} outstanding={outstanding} focusedNote={focusedNote} {...props} />;
+          return <PatientDetail records={records} upcoming={upcoming} outstanding={outstanding} focusedNote={focusedNote}
+            back={from === labReturnsView ? labReturnsRoute : undefined}
+            openFollowUps={from === labReturnsView && params.get('view') === 'follow-up'} {...props} />;
         }
         if (sub === 'edit') return <PatientForm {...props} />;
         if (sub === 'delete') return <DeletePatient patient={patient} save={save} />;
@@ -227,6 +230,7 @@ export default function App({ repository, native = false, previewStatus = 'Ficti
             block={block} calendarAccess={calendarAccess} back={appointment ? detail : appointmentBack} save={save} />;
         }
         if (appointment) return <AppointmentDetail item={appointment} records={records} now={now} back={appointmentBack} save={save}
+          fromLabWarning={fromLabWarning}
           outcomePending={outstanding.some(visit => visit.id === appointment.id)}
           remove={() => save(current => deleteAppointment(current, appointment.id, appointment.kind), { offerBooking: false })}
           onDeleted={() => {
@@ -255,7 +259,7 @@ export default function App({ repository, native = false, previewStatus = 'Ficti
         }
         break;
       }
-      case 'planning': return <Planning records={records} today={today} />;
+      case 'planning': return <Planning records={records} today={today} now={now} labOnly={params.get('view') === labReturnsView} />;
       case 'attention': return <Attention records={records} today={today} outstanding={outstanding} save={save} />;
       case 'appointment-outcomes': return <AppointmentOutcomes visits={outstanding} records={records} today={today}
         fromAttention={from === 'attention'} />;
@@ -275,7 +279,7 @@ export default function App({ repository, native = false, previewStatus = 'Ficti
           back={from === 'today' ? '/today' : from === 'notifications' ? '/data/notifications' : '/data'} />;
         return dataPanel({
           refresh, save, records, today,
-          restoreRecords: restored => save(() => restored, { restoring: true }),
+          restoreRecords: restored => save(() => restored),
           calendarPublishing: native ? <GoogleCalendarPublishing publishing={publishing} refreshCalendar={calendarAccess.refresh} /> : undefined,
         });
     }
@@ -288,6 +292,7 @@ export default function App({ repository, native = false, previewStatus = 'Ficti
   if (section === 'appointments') tab = from ?? 'calendar';
   if ('/' + section === labRoute) tab = from === 'responses' ? 'work' : 'today';
   if (section === 'tasks' || (section === 'patients' && sub === 'responses')) tab = fromPatient ? 'patients' : from ?? 'work';
+  if (tab === labReturnsView) tab = 'planning';
   if (tab === 'patient-search') tab = 'patients';
   if (tab === 'attention' || outcomeReturnRoutes.has(tab)) tab = 'today';
   if (tab === 'availability' || tab === 'calendar-conflicts' || tab === 'ignored-calendar-events') tab = 'calendar';

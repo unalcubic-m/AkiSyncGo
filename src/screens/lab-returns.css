@@ -1,0 +1,52 @@
+.returned-patients { display: grid; gap: var(--space-4); }
+.returned-patients h2 { margin-bottom: var(--space-2); font-size: var(--text-base); }
+.returned-patient .compact-row-content small { line-height: 1.4; }
+.returned-patient[data-booked='true'] .compact-row-content > strong { color: var(--muted-strong); }
+.returned-patient .returned-hold { color: var(--amber); }
+
+.returned-booked > summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  min-height: var(--touch);
+  text-align: start;
+  cursor: pointer;
+  list-style: none;
+}
+.returned-booked > summary::-webkit-details-marker { display: none; }
+.returned-booked > summary:hover { background: var(--surface-hover); }
+.returned-booked[open] .opening-caret { rotate: 180deg; }
+.returned-booked > ul { border-top: 1px solid var(--border); }
+
+.lab-appointment-warning { margin-top: var(--space-3); border-color: var(--amber); }
+.lab-appointment-warning-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+.lab-appointment-warning-heading h2 { font-size: var(--text-base); }
+.lab-appointment-warning-heading small { display: block; line-height: 1.35; }
+.lab-warning-icon {
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  color: var(--amber);
+  background: var(--amber-soft);
+  border-radius: var(--radius-sm);
+}
+.lab-appointment-warning-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--border);
+}
+.lab-warning-row-copy { display: grid; gap: var(--space-1); }
+.lab-warning-row-copy small { overflow-wrap: anywhere; line-height: 1.35; }
+.lab-appointment-replacement { margin-block: var(--space-3); }

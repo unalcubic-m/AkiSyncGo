@@ -121,7 +121,7 @@ function Mockup() {
 
   let body: ReactNode;
   if (screen === '/today') body = <Today today={today} records={records} checked={!!closed} />;
-  else if (planning) body = <Planning records={records} today={today} />;
+  else if (planning) body = <Planning records={records} today={today} now={new Date()} labOnly={params.get('view') === 'lab-returns'} />;
   else if (screen === labRoute) body = <Laboratory key={today} records={records} today={today} closed={closed}
     fromFollowUps={labFromFollowUps} onClose={result => {
       setCheck(today, result);

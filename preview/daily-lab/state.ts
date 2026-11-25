@@ -1,6 +1,5 @@
 import { newId } from '../../src/components/ui';
 import { addDays, parseDate } from '../../src/domain/dates';
-import { trackLabClearance } from '../../src/domain/lab-planning';
 import { decodeRecords, uppercasePatientName, type Patient, type RecordChange, type Records, type Wait } from '../../src/domain/model';
 import { normalizePatientSearch } from '../../src/domain/workflows';
 import { getLocale, t } from '../../src/i18n';
@@ -98,10 +97,7 @@ export function setCheck(date: string, result: LabResult) { update(current => ({
 
 export function saveRecords(change: RecordChange) {
   update(current => {
-    const next = change(current.records);
-    const records = reopenCheckedLab && next.labPlanning === current.records.labPlanning
-      ? trackLabClearance(current.records, next, previewDate()) : next;
-    return { ...current, records: decodeRecords(records) };
+    return { ...current, records: decodeRecords(change(current.records)) };
   });
   return data.records;
 }

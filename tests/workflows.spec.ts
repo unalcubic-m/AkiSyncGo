@@ -1025,13 +1025,13 @@ test('a lab check tracks a patient’s laboratory return and releases the bookin
   await expect(labCheck).toHaveCount(0);
   await main.getByRole('link', { name: 'Planning' }).click();
   const ada = page.getByRole('link', { name: /^ADA KESTREL/ });
-  const labFilter = page.getByRole('button', { name: 'LabCheck filter' });
+  const labFilter = page.getByRole('button', { name: 'Patients with work returned from lab' });
   await expect(ada).toBeVisible();
   await expect(labFilter).toHaveAttribute('aria-pressed', 'false');
   await labFilter.click();
   await expect(labFilter).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('status').filter({ hasText: '1 ready to book' })).toBeVisible();
-  await expect(ada).toBeVisible();
+  const ready = page.getByRole('region', { name: 'Ready to book', exact: true });
+  await expect(ready.getByRole('link', { name: /^ADA KESTREL/ })).toBeVisible();
   await page.reload();
   await expect(labFilter).toHaveAttribute('aria-pressed', 'true');
   await expect(ada).toBeVisible();

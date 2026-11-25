@@ -3,35 +3,34 @@ import { CalendarPlus, Flask, Plus } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { Empty, Field, More, navigate, PageHeader, path, RecordForm, Section, value, newId } from '../components/ui';
 import { formatDate } from '../domain/dates';
-import { labClearedPatientIds } from '../domain/lab-planning';
+import { labReturnsRoute } from '../domain/lab-returns';
 import { upsert, type RecordChange, type Records, type Visit } from '../domain/model';
 import type { ScheduleConflict } from '../domain/schedule-conflicts';
 import { openTasks, planningCandidates, responseReviews } from '../domain/workflows';
-import { useRouteField } from '../navigation';
+import { openRoute } from '../navigation';
 import { OutcomeShortcut } from './AppointmentOutcomes';
 import { BreakSettings, DateHours, HoursFields, WeekdayPicker, weekdays } from './ScheduleSettings';
 import { TaskList } from './Tasks';
 import { FollowUpList } from '../components/FollowUpList';
+import { LabReturnList } from './LabReturns';
 
 type Save = (change: RecordChange) => Promise<void>;
 
-export function Planning({ records, today }: { records: Records; today: string }) {
-  const [labOnly, setLabOnly] = useRouteField('labOnly', false);
-  const labPatients = labOnly ? labClearedPatientIds(records, today) : undefined;
-  const candidates = planningCandidates(records, today).filter(({ patient }) => !labPatients || labPatients.has(patient.id));
-  const filterLabel = t('LabCheck filter');
+export function Planning({ records, today, now, labOnly }: { records: Records; today: string; now: Date; labOnly: boolean }) {
+  const candidates = labOnly ? [] : planningCandidates(records, today);
+  const filterLabel = t('Patients with work returned from lab');
   return <>
     <header className="page-header planning-header">
       <div>
         <h1>{t('Planning')}</h1>
-        <p role="status">{t('{count} ready to book', { count: candidates.length })}</p>
+        <p role="status">{labOnly ? filterLabel : t('{count} ready to book', { count: candidates.length })}</p>
       </div>
       <button className="icon-button planning-lab-filter" type="button" aria-label={filterLabel} title={filterLabel}
-        aria-pressed={labOnly} onClick={() => setLabOnly(!labOnly)}>
+        aria-pressed={labOnly} onClick={() => openRoute(labOnly ? '/planning' : labReturnsRoute)}>
         <Flask size={22} weight={labOnly ? 'fill' : 'regular'} aria-hidden />
       </button>
     </header>
-    {candidates.length > 0 ? <ul className="panel compact-list planning-list">
+    {labOnly ? <LabReturnList records={records} today={today} now={now} /> : candidates.length > 0 ? <ul className="panel compact-list planning-list">
       {candidates.map(({ patient, seenOn, elapsedDays }) => <li key={patient.id} className="compact-list-row planning-patient-row">
         <a className="compact-row-link" href={path('/patients/' + patient.id)}>
           <span className="compact-row-content">

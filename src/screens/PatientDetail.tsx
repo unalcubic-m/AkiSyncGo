@@ -198,10 +198,11 @@ function FollowUpPanel({ patient, records, href, today, save }: { patient: Patie
   </div>;
 }
 
-export default function PatientDetail({ records, patient, today, upcoming, outstanding, focusedNote, save }: {
-  records: Records; patient: Patient; today: string; upcoming: Appointment[]; outstanding: Visit[]; focusedNote?: string; save: Save;
+export default function PatientDetail({ records, patient, today, upcoming, outstanding, focusedNote, back = '/patients', openFollowUps, save }: {
+  records: Records; patient: Patient; today: string; upcoming: Appointment[]; outstanding: Visit[]; focusedNote?: string;
+  back?: string; openFollowUps?: boolean; save: Save;
 }) {
-  const [tab, setTab] = useRouteField<ProfileTab>('patientProfileTab', focusedNote ? 'history' : 'overview');
+  const [tab, setTab] = useRouteField<ProfileTab>('patientProfileTab', focusedNote ? 'history' : openFollowUps ? 'follow-up' : 'overview');
   const [noteState, setNoteState] = useState<NoteState>({ mode: 'idle' });
   const addNote = useRef<HTMLButtonElement>(null);
   const tabBar = useRef<HTMLDivElement>(null);
@@ -253,7 +254,7 @@ export default function PatientDetail({ records, patient, today, upcoming, outst
 
   return <div className="patient-profile">
     <div className="patient-profile-top">
-      <a className="back patient-profile-back" href={path('/patients')}><ArrowLeft size={17} aria-hidden />{t('Back')}</a>
+      <a className="back patient-profile-back" href={path(back)}><ArrowLeft size={17} aria-hidden />{t('Back')}</a>
       <a className="patient-profile-text-link" href={path(href + '/edit')} aria-label={t('Edit patient')}>
         <PencilSimple size={17} aria-hidden />{t('Edit')}
       </a>

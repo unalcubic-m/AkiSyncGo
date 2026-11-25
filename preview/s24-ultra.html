@@ -46,11 +46,13 @@
         ['patient-profile', { source: './patient-profile/', route: '#/patients/demo-eli' }],
         ['daily-lab', { source: './daily-lab/', route: '#/today' }],
         ['daily-lab-inline', { source: './daily-lab/?variant=inline-check', route: '#/daily-lab?from=responses' }],
+        ['lab-returns', { source: './lab-returns/', route: '#/today' }],
       ]);
       const preview = previews.get(mockup) ?? { source: '../', route: '#/today' };
       const app = new URL(preview.source, location.href);
       const optimumDemo = mockup === 'compact-appointment' && params.get('scenario') === 'optimum';
       if (optimumDemo) app.searchParams.set('scenario', 'optimum');
+      if (mockup === 'lab-returns' && params.get('data') === 'synthetic') app.searchParams.set('data', 'synthetic');
       const defaultRoute = optimumDemo ? '#/appointments/new?from=today' : preview.route;
       const currentRoute = () => location.hash || defaultRoute;
 
