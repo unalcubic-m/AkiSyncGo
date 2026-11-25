@@ -2,6 +2,7 @@ export const turkish = {
   'Done': 'Tamamlandı',
   'Mark done': 'Tamamla',
   "Daily Laboratory Check": "Günlük laboratuvar kontrolü",
+  "Checked today": "Bugün kontrol edildi",
   "Today’s check is still open.": "Bugünkü kontrol hâlâ açık.",
   "Check what arrived in the lab drawer": "Çekmeceye gelen laboratuvar işlerini kontrol et",
   "Today’s laboratory check is complete.": "Bugünkü laboratuvar kontrolü tamamlandı.",

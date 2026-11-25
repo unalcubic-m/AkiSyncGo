@@ -30,7 +30,7 @@ import Today from './screens/Today';
 import { ChooseResponsePatient, Work } from './screens/Work';
 import { FollowUpDetail, TaskDetail } from './screens/WorkItemDetails';
 import type { Repository } from './storage/repository';
-import { finishRoute, openRoute, restoreScrollPosition, useAppRoute } from './navigation';
+import { finishRoute, openRoute, readRoute, restoreScrollPosition, returnToPreviousRoute, useAppRoute } from './navigation';
 import './screens/appointment-outcomes.css';
 
 const tabs = [
@@ -152,12 +152,13 @@ export default function App({ repository, native = false, previewStatus = 'Ficti
     switch (section) {
       case 'today': return <Today records={records} today={today} now={now} outstanding={outstanding} calendarAccess={calendarAccess} save={save} />;
       case 'daily-lab': {
-        const fromWork = from === 'responses';
-        return <DailyLabCheck key={today} records={records} today={today} fromWork={fromWork}
+        const back = from === 'responses' ? labFollowUpsRoute : '/today';
+        return <DailyLabCheck key={today} records={records} today={today} back={back}
           save={change => save(change, { offerBooking: false })} onClose={async result => {
-            await save(current => ({ ...current, dailyLabCheck: { date: today, result } }), { offerBooking: false });
+            const date = localDate();
+            await save(current => ({ ...current, dailyLabCheck: { date, result } }), { offerBooking: false });
             setNotice({ message: labResultMessage(result) });
-            finishRoute(fromWork ? labFollowUpsRoute : '/today');
+            if (readRoute() === route) returnToPreviousRoute(back);
           }} />;
       }
       case 'calendar': return <Calendar records={records} today={today} selected={validDate ?? today} calendarAccess={calendarAccess} conflicts={currentConflicts}

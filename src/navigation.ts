@@ -54,7 +54,7 @@ export function finishRoute(route: string) {
   writeEntry({ route, trail: current.trail }, 'replaceState');
 }
 
-function back(fallback: string) {
+export function returnToPreviousRoute(fallback: string) {
   const current = readEntry();
   if (current.trail.length) {
     savePosition(current);
@@ -82,7 +82,7 @@ export function useAppRoute() {
       const target = link.getAttribute('href')?.slice(1);
       if (!target || target.startsWith('//')) return;
       event.preventDefault();
-      if (link.matches('.back, [data-navigation-back]')) back(target);
+      if (link.matches('.back, [data-navigation-back]')) returnToPreviousRoute(target);
       else openRoute(target);
     }
 

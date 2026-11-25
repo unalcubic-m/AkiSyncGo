@@ -562,21 +562,46 @@ test('Today limits availability by calendar and working days and stores reminder
   await expect(tuesday).toHaveCount(0);
 });
 
-test('daily lab checks keep a dismissal visible in Work and reuse each patient’s LabCheck', async ({ page }) => {
+test('Nothing arrived hides the Today shortcut and leaves the lab screen usable for later arrivals', async ({ page }) => {
   const now = new Date('2026-11-23T08:00:00+03:00');
   const records = fictionalRecords(now);
-  records.waits.push({ id: 'test-lab', patientId: 'demo-eli', title: 'Ceramic crown', type: 'Laboratory return', status: 'Waiting',
-    startedOn: '2026-11-22', reviewOn: null, endedOn: null, blocks: true, notes: '' });
+  const lab = { id: 'test-lab', patientId: 'demo-eli', title: 'Ceramic crown', type: 'Laboratory return', status: 'Waiting',
+    startedOn: '2026-11-22', reviewOn: null, endedOn: null, blocks: true, notes: '' } as const;
+  records.waits.push(lab, { ...lab, id: 'test-lab-fit', patientId: 'demo-mira', title: 'Fit check' },
+    { ...lab, id: 'test-lab-retainer', patientId: 'demo-ada', title: 'Retainer' });
+  records.dailyLabReminder = { enabled: true, time: '14:00', days: [1, 2] };
   await page.addInitScript(data => {
     const key = 'akisync-fictional-preview-v1';
     if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(data));
   }, records);
   await page.goto('/#/today');
   const shortcut = page.getByRole('link', { name: /^Daily Laboratory Check/ });
+  const storedRecords = () => page.evaluate(() => JSON.parse(localStorage.getItem('akisync-fictional-preview-v1')!)) as Promise<typeof records>;
+  const checked = { date: '2026-11-23', result: 'nothing' };
   await shortcut.click();
+  await page.getByRole('button', { name: 'Nothing arrived' }).click();
+  await expect(page).toHaveURL(/#\/today$/);
+  await expect(shortcut).toHaveCount(0);
+  expect(await storedRecords()).toMatchObject({ dailyLabCheck: checked, waits: records.waits });
+
+  await page.getByRole('link', { name: 'Work', exact: true }).click();
+  await expect(shortcut).toHaveCount(0);
+  await page.getByRole('link', { name: 'Follow-ups', exact: true }).click();
+  await expect(shortcut).toContainText('Checked today');
+  await shortcut.click();
+  await expect(page.getByRole('heading', { name: 'Daily Laboratory Check' })).toBeVisible();
+  await expect(page.getByText('Checked today', { exact: true })).toBeVisible();
+  const pending = page.getByRole('region', { name: 'Pending LabCheck tasks' });
+  await expect(pending.getByRole('listitem')).toHaveCount(3);
+  await pending.getByRole('link', { name: 'ELİ DEMİR' }).click();
+  await expect(page.getByRole('heading', { name: 'ELİ DEMİR' })).toBeVisible();
+  await page.getByRole('link', { name: 'Back', exact: true }).click();
+  await pending.getByRole('button', { name: /Ceramic crown/ }).click();
+  await expect(pending.getByText('Ceramic crown')).toHaveCount(0);
+
   await page.getByText('Add Missing Patients / LabCheck Tasks').click();
   const name = page.getByRole('searchbox', { name: 'Patient name' });
-  for (const patient of ['Eli Demir', 'Nora Vale', 'Nora Vale']) {
+  for (const patient of ['Mira Arden', 'Nora Vale', 'Nora Vale']) {
     await name.fill(patient);
     await page.getByRole('button', { name: 'Find', exact: true }).click();
     await expect(name).toHaveValue('');
@@ -585,18 +610,59 @@ test('daily lab checks keep a dismissal visible in Work and reuse each patient�
   await page.getByRole('button', { name: 'Find', exact: true }).click();
   await page.getByRole('button', { name: 'Create patient' }).click();
   await page.getByRole('button', { name: 'Save and mark Done' }).click();
-  await expect(page.getByText('3 lab cases done today')).toBeVisible();
-  await page.getByRole('button', { name: 'Dismiss for today' }).click();
-  await expect(shortcut).toHaveCount(0);
-  await page.getByRole('link', { name: 'Work', exact: true }).click();
-  await page.getByRole('link', { name: 'Follow-ups', exact: true }).click();
-  await expect(shortcut).toContainText('Laboratory check dismissed for today.');
-  await shortcut.click();
-  await expect(page.getByRole('heading', { name: 'Daily Laboratory Check' })).toBeVisible();
-  await expect(page.getByText('3 lab cases done today')).toBeVisible();
-  await page.getByRole('link', { name: 'Back to Follow-ups' }).click();
+  await expect(page.getByText('4 lab cases done today')).toBeVisible();
+  await expect(pending.getByRole('listitem')).toHaveCount(1);
+  await expect(pending.getByText('Retainer')).toBeVisible();
+  await expect(page.getByText('Checked today', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Dismiss for today' })).toHaveCount(0);
+  const saved = await storedRecords();
+  expect(saved).toMatchObject({ dailyLabCheck: checked, dailyLabReminder: records.dailyLabReminder });
+  const jamie = saved.patients.find(patient => patient.name === 'JAMİE STONE');
+  expect(jamie).toBeDefined();
+  expect(saved.waits).toEqual(expect.arrayContaining([
+    { ...lab, status: 'Resolved', endedOn: checked.date },
+    expect.objectContaining({ id: 'test-lab-fit', status: 'Resolved', endedOn: checked.date }),
+    { ...lab, id: 'test-lab-retainer', patientId: 'demo-ada', title: 'Retainer' },
+    expect.objectContaining({ patientId: 'demo-nora', type: 'Laboratory return', status: 'Resolved', endedOn: checked.date }),
+    expect.objectContaining({ patientId: jamie?.id, type: 'Laboratory return', status: 'Resolved', endedOn: checked.date }),
+  ]));
+  expect(saved.waits.filter(wait => wait.patientId === 'demo-nora')).toHaveLength(1);
+
   await page.reload();
-  await expect(shortcut).toContainText('Laboratory check dismissed for today.');
+  await expect(page.getByText('Checked today', { exact: true })).toBeVisible();
+  await expect(pending.getByText('Retainer')).toBeVisible();
+  await page.getByRole('link', { name: 'Back', exact: true }).click();
+  await expect(page).toHaveURL(/#\/work\?view=responses$/);
+  await expect(shortcut).toContainText('Checked today');
+  await page.getByRole('link', { name: 'Today', exact: true }).click();
+  await expect(shortcut).toHaveCount(0);
+
+  await page.clock.setFixedTime(new Date('2026-11-24T08:00:00+03:00'));
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await expect(shortcut).toBeVisible();
+  await shortcut.click();
+  await expect(page.getByText('Checked today', { exact: true })).toHaveCount(0);
+  await expect(pending.getByText('Retainer')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Nothing arrived' })).toBeVisible();
+});
+
+test('Dismiss for today returns to the original Follow-ups view and persists through a reload', async ({ page }) => {
+  await page.goto('/#/work?view=responses');
+  const shortcut = page.getByRole('link', { name: /^Daily Laboratory Check/ });
+  const filter = page.getByRole('combobox', { name: 'Status', exact: true });
+  await filter.selectOption('Cancelled');
+  await shortcut.click();
+  await page.getByRole('button', { name: 'Dismiss for today' }).click();
+  await expect(page).toHaveURL(/#\/work\?view=responses$/);
+  await expect(filter).toHaveValue('Cancelled');
+  await expect(shortcut).toContainText('Checked today');
+  await page.reload();
+  await expect(shortcut).toContainText('Checked today');
+  await shortcut.click();
+  await expect(page.getByText('Checked today', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Pending LabCheck tasks' })).toBeVisible();
+  await page.getByRole('link', { name: 'Today', exact: true }).click();
+  await expect(shortcut).toHaveCount(0);
 });
 
 test('the first availability shortcut and the prefilled visit skip the next hour', async ({ page }) => {

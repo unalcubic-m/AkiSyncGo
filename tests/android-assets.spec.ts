@@ -1,10 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { jumpToCalendarDate } from './calendar';
 import { chooseBookingPatient, chooseBookingStart, dismissBookingOffer, expectBookingTime, openTimePicker } from './booking';
 
-test('Android assets choose a folder offline, save readable records and switch the app lock independently', async ({ page }) => {
+async function mockAndroidBridge(page: Page) {
   await page.clock.setFixedTime(new Date('2026-11-23T08:00:00+03:00'));
   const root = resolve('.test-android-assets');
   const types: Record<string, string> = { html: 'text/html', js: 'text/javascript', css: 'text/css' };
@@ -40,11 +40,13 @@ test('Android assets choose a folder offline, save readable records and switch t
         { name: 'AkiSyncClipboard', methods: methods(['copyPatientPhone', 'copyAppointmentTime']) },
         { name: 'App', methods: listenerMethods },
       ],
-      async nativeCallback(plugin: string, _method: string, _options: object, callback: (result: object) => void) {
+      async nativeCallback(plugin: string, _method: string, options: { eventName: string }, callback: (result: object) => void) {
         const id = String(++nextListener);
         const events = plugin === 'AkiSyncCalendar'
           ? [['test-calendar-change', () => callback({})]] as const
-          : [['test-background', () => callback({ isActive: false })], ['test-foreground', () => callback({ isActive: true })]] as const;
+          : options.eventName === 'appUrlOpen'
+            ? [['test-app-url-open', (event: Event) => callback((event as CustomEvent).detail)]] as const
+            : [['test-background', () => callback({ isActive: false })], ['test-foreground', () => callback({ isActive: true })]] as const;
         for (const [name, handler] of events) window.addEventListener(name, handler);
         subscriptions.set(id, () => {
           for (const [name, handler] of events) window.removeEventListener(name, handler);
@@ -133,7 +135,34 @@ test('Android assets choose a folder offline, save readable records and switch t
       },
     };
   });
+  return unexpected;
+}
 
+test('Android notification confirmation goes back to the screen the user was on', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-11-23T10:00:00+03:00'));
+  await mockAndroidBridge(page);
+  await page.goto('https://localhost/#/calendar?date=2026-11-26');
+  await page.getByRole('button', { name: 'Klasör seç' }).click();
+  await expect(page.getByRole('heading', { name: 'Takvim', exact: true })).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('test-app-url-open', { detail: { url: 'akisync://daily-lab' } })));
+  await expect(page.getByRole('heading', { name: 'Günlük laboratuvar kontrolü' })).toBeVisible();
+  await page.getByRole('button', { name: 'Bugün için kapat' }).click();
+  await expect(page).toHaveURL(/#\/calendar\?date=2026-11-26$/);
+  await expect(page.getByRole('heading', { name: 'Takvim', exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole('navigation').getByRole('link', { name: 'Bugün', exact: true }).click();
+  const shortcut = page.getByRole('link', { name: /^Günlük laboratuvar kontrolü/ });
+  await expect(shortcut).toHaveCount(0);
+  await page.getByRole('navigation').getByRole('link', { name: 'İşler', exact: true }).click();
+  await page.getByRole('link', { name: 'Takipler', exact: true }).click();
+  await expect(shortcut).toContainText('Bugün kontrol edildi');
+  await shortcut.click();
+  await expect(page.getByText('Bugün kontrol edildi', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Bekleyen laboratuvar işleri' })).toBeVisible();
+});
+
+test('Android assets choose a folder offline, save readable records and switch the app lock independently', async ({ page }) => {
+  const unexpected = await mockAndroidBridge(page);
   const appPassword = 'fictional orange silent lake';
   await page.context().setOffline(true);
   await page.goto('https://localhost/');

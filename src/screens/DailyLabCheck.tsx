@@ -1,8 +1,8 @@
 import { CaretDown, CaretRight, Check, CheckCircle, Flask, Plus, UserCircle } from '@phosphor-icons/react';
 import { useRef, useState, type FormEvent } from 'react';
-import { ButtonLink, Field, newId, PageHeader, path, Pill, value } from '../components/ui';
-import { confirmLab, confirmPatientLab, confirmedLabs, createLabPatient, exactLabPatientMatches, labFollowUpsRoute,
-  labResultMessage, labResultToday, labRoute, pendingLabs } from '../domain/daily-lab';
+import { Field, newId, PageHeader, path, Pill, value } from '../components/ui';
+import { confirmLab, confirmPatientLab, confirmedLabs, createLabPatient, exactLabPatientMatches,
+  labResultToday, labRoute, pendingLabs } from '../domain/daily-lab';
 import { titleDate } from '../domain/dates';
 import type { Patient, RecordChange, Records, Wait } from '../domain/model';
 import type { LabResult } from '../domain/notification-settings';
@@ -15,14 +15,14 @@ const doneLabel = (count: number) => t('{count} lab cases done today', { count }
 type Save = (change: RecordChange) => Promise<void>;
 
 export function LabCheckShortcut({ records, today, fromWork = false }: { records: Records; today: string; fromWork?: boolean }) {
-  const result = labResultToday(records, today);
-  if (result && !fromWork) return null;
+  const checked = Boolean(labResultToday(records, today));
+  if (checked && !fromWork) return null;
   const count = pendingLabs(records).length;
-  const Icon = result === 'finished' ? CheckCircle : Flask;
+  const Icon = checked ? CheckCircle : Flask;
   return <a className="panel lab-widget" href={path(labRoute + (fromWork ? '?from=responses' : ''))}>
-    <span className={`lab-icon ${result === 'finished' ? 'lab-icon-green' : 'lab-icon-blue'}`}><Icon size={22} weight="duotone" aria-hidden /></span>
+    <span className={`lab-icon ${checked ? 'lab-icon-green' : 'lab-icon-blue'}`}><Icon size={22} weight="duotone" aria-hidden /></span>
     <span className="lab-widget-copy"><strong>{t('Daily Laboratory Check')}</strong>
-      <small>{result ? t(labResultMessage(result)) : t(fromWork ? 'Today’s check is still open.' : 'Check what arrived in the lab drawer')}</small>
+      <small>{t(checked ? 'Checked today' : fromWork ? 'Today’s check is still open.' : 'Check what arrived in the lab drawer')}</small>
       {!fromWork && count > 0 && <Pill tone="blue">{pendingLabel(count)}</Pill>}
     </span><CaretRight size={17} aria-hidden />
   </a>;
@@ -138,16 +138,15 @@ function MissingCases({ records, today, busy, run, save }: {
   </details>;
 }
 
-export default function DailyLabCheck({ records, today, fromWork, save, onClose }: {
-  records: Records; today: string; fromWork: boolean; save: Save; onClose: (result: LabResult) => Promise<void>;
+export default function DailyLabCheck({ records, today, back, save, onClose }: {
+  records: Records; today: string; back: string; save: Save; onClose: (result: LabResult) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
   const pending = pendingLabs(records);
   const confirmed = confirmedLabs(records, today);
-  const closed = labResultToday(records, today);
-  const returnTo = fromWork ? labFollowUpsRoute : '/today';
+  const checked = Boolean(labResultToday(records, today));
   const patientFor = (wait: Wait) => records.patients.find(patient => patient.id === wait.patientId);
 
   async function run(action: () => Promise<string | void>) {
@@ -161,35 +160,29 @@ export default function DailyLabCheck({ records, today, fromWork, save, onClose 
   }
 
   return <div className="lab-page">
-    <PageHeader title={t('Daily Laboratory Check')} subtitle={titleDate(today)} back={returnTo} />
-    {closed ? <div className="panel lab-empty">
-      <CheckCircle size={29} aria-hidden /><p>{t(labResultMessage(closed))}</p>
-      <div className="badges lab-summary-badges"><Pill tone="green">{doneLabel(confirmed.length)}</Pill>
-        {pending.length > 0 && <Pill tone="amber">{pendingLabel(pending.length)}</Pill>}</div>
-      <ButtonLink to={returnTo} secondary back={fromWork}>{t(fromWork ? 'Back to Follow-ups' : 'Go to Today')}</ButtonLink>
-    </div> : <>
-      <p className="lab-intro muted">{t('Mark the cases that are in the lab drawer as Done.')}</p>
-      <section aria-labelledby="pending-lab-heading">
-        <div className="lab-section-heading"><h2 id="pending-lab-heading">{t('Pending LabCheck tasks')}</h2><Pill tone="blue">{pendingLabel(pending.length)}</Pill></div>
-        {pending.length ? <ul className="panel lab-list">{pending.map(wait => <CaseRow key={wait.id} wait={wait} patient={patientFor(wait)} busy={busy}
-          onDone={() => void run(async () => { await save(current => confirmLab(current, wait.id, today)); return patientFor(wait)?.name; })} />)}</ul>
-          : <div className="panel lab-empty"><CheckCircle size={26} aria-hidden /><p>{t('No pending laboratory cases.')}</p></div>}
-      </section>
-      <MissingCases records={records} today={today} busy={busy} run={run} save={save} />
-      <p className={status ? 'lab-status' : 'visually-hidden'} role="status">{status}</p>
-      {confirmed.length > 0 && <details className="panel lab-confirmed">
-        <summary><span className="lab-icon lab-icon-green"><CheckCircle size={21} weight="fill" aria-hidden /></span>
-          <strong>{doneLabel(confirmed.length)}</strong><CaretDown size={17} aria-hidden /></summary>
-        <ul className="lab-list">{confirmed.map(wait => <CaseRow key={wait.id} wait={wait} patient={patientFor(wait)} />)}</ul>
-      </details>}
-      {error && <p className="form-error lab-error" role="alert">{error}</p>}
-      <div className="lab-actions">
-        {!pending.length && <button className="button" type="button" disabled={busy} onClick={() => void run(() => onClose('finished'))}>{t('Finish check')}</button>}
-        {!confirmed.length && <button className={`button${pending.length ? '' : ' secondary'}`} type="button" disabled={busy}
-          onClick={() => void run(() => onClose('nothing'))}>{t('Nothing arrived')}</button>}
-        <button className="button secondary" type="button" disabled={busy} onClick={() => void run(() => onClose('dismissed'))}>{t('Dismiss for today')}</button>
-        {pending.length > 0 && <small>{t('Pending cases stay open for the next check.')}</small>}
-      </div>
-    </>}
+    <PageHeader title={t('Daily Laboratory Check')} subtitle={titleDate(today)} back={back} />
+    <p className="lab-intro muted">{t('Mark the cases that are in the lab drawer as Done.')}</p>
+    {checked && <p className="lab-check-status"><Pill tone="green">{t('Checked today')}</Pill></p>}
+    <section aria-labelledby="pending-lab-heading">
+      <div className="lab-section-heading"><h2 id="pending-lab-heading">{t('Pending LabCheck tasks')}</h2><Pill tone="blue">{pendingLabel(pending.length)}</Pill></div>
+      {pending.length ? <ul className="panel lab-list">{pending.map(wait => <CaseRow key={wait.id} wait={wait} patient={patientFor(wait)} busy={busy}
+        onDone={() => void run(async () => { await save(current => confirmLab(current, wait.id, today)); return patientFor(wait)?.name; })} />)}</ul>
+        : <div className="panel lab-empty"><CheckCircle size={26} aria-hidden /><p>{t('No pending laboratory cases.')}</p></div>}
+    </section>
+    <MissingCases records={records} today={today} busy={busy} run={run} save={save} />
+    <p className={status ? 'lab-status' : 'visually-hidden'} role="status">{status}</p>
+    {confirmed.length > 0 && <details className="panel lab-confirmed">
+      <summary><span className="lab-icon lab-icon-green"><CheckCircle size={21} weight="fill" aria-hidden /></span>
+        <strong>{doneLabel(confirmed.length)}</strong><CaretDown size={17} aria-hidden /></summary>
+      <ul className="lab-list">{confirmed.map(wait => <CaseRow key={wait.id} wait={wait} patient={patientFor(wait)} />)}</ul>
+    </details>}
+    {error && <p className="form-error lab-error" role="alert">{error}</p>}
+    {!checked && <div className="lab-actions">
+      {!pending.length && <button className="button" type="button" disabled={busy} onClick={() => void run(() => onClose('finished'))}>{t('Finish check')}</button>}
+      {!confirmed.length && <button className={`button${pending.length ? '' : ' secondary'}`} type="button" disabled={busy}
+        onClick={() => void run(() => onClose('nothing'))}>{t('Nothing arrived')}</button>}
+      <button className="button secondary" type="button" disabled={busy} onClick={() => void run(() => onClose('dismissed'))}>{t('Dismiss for today')}</button>
+      {pending.length > 0 && <small>{t('Pending cases stay open for the next check.')}</small>}
+    </div>}
   </div>;
 }
