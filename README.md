@@ -121,3 +121,7 @@ npm run test:e2e
 ```
 
 The browser tests cover the first workflow with networking off after preview load, scheduling conflicts and exceptions, planning eligibility, and responsive layouts. They also run the packaged Android frontend offline against a simulated native bridge to exercise first folder selection, record copies, and the optional app passphrase.
+
+## Copyright and licensing
+
+Copyright © 2026 AkiSync. All rights reserved. See [LICENSE](LICENSE) for the terms that apply to this repository.
