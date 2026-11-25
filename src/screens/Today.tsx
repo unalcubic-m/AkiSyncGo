@@ -96,7 +96,7 @@ export default function Today({ records, today, now, outstanding, calendarAccess
       </div>
     </div>
     <AppointmentsToReview records={records} today={today} />
-    <PatientsToCall records={records} today={today} now={now} save={save} />
+    <PatientsToCall records={records} today={today} now={now} />
     <LabCheckShortcut records={records} today={today} />
     <OutcomeShortcut visits={outstanding} today={today} />
     <UpcomingOpenings records={records} today={today} readyCount={ready.length} calendarAccess={calendarAccess} />

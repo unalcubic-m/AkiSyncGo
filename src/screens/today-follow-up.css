@@ -2,12 +2,19 @@
 .appointment-review { border-color: var(--amber); }
 .today-follow-up-heading {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3);
+  border-radius: inherit;
+  cursor: pointer;
+  list-style: none;
 }
-.today-follow-up-heading h2 { font-size: var(--text-base); }
+.today-follow-up-heading::-webkit-details-marker { display: none; }
+.today-follow-up-heading:hover { background: var(--surface-hover); }
+.today-follow-up-heading:focus-visible { outline-offset: -3px; }
+.today-follow-up-heading > strong { letter-spacing: -.022em; line-height: 1.25; }
+.today-follow-up-card[open] > summary .opening-caret { rotate: 180deg; }
 .today-follow-up-icon {
   display: grid;
   place-items: center;

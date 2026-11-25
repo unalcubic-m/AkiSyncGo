@@ -163,7 +163,7 @@ test('Android notification confirmation goes back to the screen the user was on'
   await expect(page.getByRole('heading', { name: 'Bekleyen laboratuvar işleri' })).toBeVisible();
 });
 
-test('Android shows the booking warnings and keeps a callback open when Ara copies the number', async ({ page }) => {
+test('Android Today cards collapse temporarily and booking clears a callback', async ({ page }) => {
   const unexpected = await mockAndroidBridge(page);
   await page.setViewportSize({ width: 384, height: 832 });
   const records = fictionalRecords(new Date(2026, 10, 23, 8));
@@ -191,18 +191,48 @@ test('Android shows the booking warnings and keeps a callback open when Ara copi
   await page.context().setOffline(true);
   await page.goto('https://localhost/#/today');
 
-  const warning = page.getByRole('region', { name: 'Kontrol gerektiren randevular' });
-  const callbacks = page.getByRole('region', { name: 'Aranacak hastalar' });
+  const warning = page.getByRole('group', { name: 'Kontrol gerektiren randevular' });
+  const callbacks = page.getByRole('group', { name: 'Aranacak hastalar' });
+  const warningHeader = warning.locator('summary');
+  const callbacksHeader = callbacks.locator('summary');
+  const navigation = page.getByRole('navigation');
   await expect(warning.getByRole('listitem')).toHaveCount(2);
+  await expect(callbacks.getByRole('listitem')).toHaveCount(1);
+
+  await warning.getByText('Kontrol gerektiren randevular', { exact: true }).click();
+  await expect(warning.getByRole('listitem')).toHaveCount(0);
+  await expect(warningHeader.getByText('2', { exact: true })).toBeVisible();
+  await expect(callbacks.getByRole('listitem')).toHaveCount(1);
+  await warningHeader.press('Space');
+  await expect(warning.getByRole('listitem')).toHaveCount(2);
+  await callbacksHeader.click();
+  await expect(callbacks.getByRole('listitem')).toHaveCount(0);
+  await expect(callbacksHeader.getByText('1', { exact: true })).toBeVisible();
+  await expect(warning.getByRole('listitem')).toHaveCount(2);
+  await warningHeader.click();
+  await navigation.getByRole('link', { name: 'Hastalar', exact: true }).click();
+  await navigation.getByRole('link', { name: 'Bugün', exact: true }).click();
+  await expect(warning.getByRole('listitem')).toHaveCount(2);
+  await expect(callbacks.getByRole('listitem')).toHaveCount(1);
+
   const nonLabWarning = warning.getByRole('listitem').filter({ hasText: 'MİRA ARDEN' });
   await expect(nonLabWarning).toContainText('Hasta yanıtı bekleniyor');
   await expect(nonLabWarning).toContainText('Yarın');
-  await expect(callbacks.getByRole('listitem')).toHaveCount(1);
+  await expect(callbacks.getByRole('listitem').getByRole('button')).toHaveText(['Ara']);
   await callbacks.getByRole('button', { name: 'Ara', exact: true }).click();
   await expect(callbacks.getByRole('status')).toHaveText('Telefon numarası kopyalandı.');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('mock-copied-phone')!))).toBe('+1 202-555-0104');
+  const plan = callbacks.getByRole('link', { name: 'Planla', exact: true });
+  const back = page.getByRole('link', { name: 'Geri', exact: true });
+  const book = page.getByRole('button', { name: 'Randevu oluştur', exact: true });
+  await plan.click();
+  await expect(book).toBeVisible();
+  await back.click();
   await expect(callbacks.getByRole('listitem')).toHaveCount(1);
-  await callbacks.getByRole('button', { name: 'Arama hatırlatmasını kapat' }).click();
+  await plan.click();
+  await book.click();
+  await expect(page.getByRole('link', { name: 'Randevuyu düzenle', exact: true })).toBeVisible();
+  await back.click();
   await expect(callbacks).toHaveCount(0);
 
   await nonLabWarning.getByRole('link', { name: 'Randevuyu aç' }).click();
@@ -220,7 +250,6 @@ test('Android shows the booking warnings and keeps a callback open when Ara copi
   await shortcut.click();
   const flask = page.getByRole('button', { name: 'Laboratuvardan işi dönen hastalar' });
   await expect(flask).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('region', { name: 'Randevuya hazır', exact: true }).getByText('ADA KESTREL')).toBeVisible();
   const blocked = page.getByRole('region', { name: 'Randevu beklemede' });
   await expect(blocked.getByText('JONAH LAKE')).toBeVisible();
   await blocked.getByRole('link', { name: 'Engelleri gör' }).click();
@@ -230,10 +259,12 @@ test('Android shows the booking warnings and keeps a callback open when Ara copi
   const booked = page.locator('.returned-booked');
   await expect(booked.getByRole('link', { name: 'Randevuyu aç' })).toBeHidden();
   await booked.getByText('Randevusu olanlar').click();
-  await booked.getByRole('link', { name: 'Randevuyu aç' }).click();
+  await expect(booked.getByText('ADA KESTREL')).toBeVisible();
+  const openEli = booked.getByRole('listitem').filter({ hasText: 'ELİ DEMİR' }).getByRole('link', { name: 'Randevuyu aç' });
+  await openEli.click();
   await expect(page.getByRole('heading', { name: 'Progress check' })).toBeVisible();
   await page.getByRole('link', { name: 'Geri', exact: true }).click();
-  await expect(booked.getByRole('link', { name: 'Randevuyu aç' })).toBeVisible();
+  await expect(openEli).toBeVisible();
   await page.goBack();
   await expect(shortcut).toBeVisible();
 
@@ -257,6 +288,11 @@ test('Android shows the booking warnings and keeps a callback open when Ara copi
   await page.getByRole('dialog', { name: 'Randevuya hazır' }).getByRole('button', { name: 'Daha sonra' }).click();
   await page.getByRole('link', { name: 'Geri', exact: true }).click();
   await expect(callbacks.getByText('MİRA ARDEN', { exact: true })).toBeVisible();
+  await plan.click();
+  await book.click();
+  await expect(page.getByRole('link', { name: 'Randevuyu düzenle', exact: true })).toBeVisible();
+  await back.click();
+  await expect(callbacks).toHaveCount(0);
   expect(unexpected).toEqual([]);
 });
 

@@ -155,7 +155,6 @@ export const turkish = {
   'Appointment callback': 'Randevu için aranacak',
   'Add a booking callback reminder': 'Randevu için arama hatırlatması ekle',
   'Callback reminder added': 'Arama hatırlatması eklendi',
-  'Close callback reminder': 'Arama hatırlatmasını kapat',
   'Invalid booking callback.': 'Geçersiz arama hatırlatması.',
   'Lab work returned': 'Laboratuvar işi geldi',
   'Call': 'Ara',
