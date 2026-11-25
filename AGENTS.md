@@ -1,8 +1,12 @@
-# AkiSync
+# AkiSync Go
 
 ## Project scope
 
-This repository contains the AkiSync Go Android app. Use the original AkiSync server project solely as a reference for mobile work.
+This repository is dedicated to **AkiSync Go**, the Android mobile app. AkiSync Go is the only AkiSync version in active use and development.
+
+- Interpret requests about “AkiSync” in this project as requests about AkiSync Go. Apply fixes, features, and verification to the Android app in this repository.
+- The original AkiSync web app and its Django server are retired. Read their source only when bringing an existing feature or behavior to AkiSync Go. Implement that work here.
+- The Galaxy S24 Ultra browser preview is a development tool for AkiSync Go.
 
 ## Mockup-first workflow
 

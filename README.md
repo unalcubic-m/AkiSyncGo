@@ -1,12 +1,14 @@
 # AkiSync Go
 
-A standalone app for one clinician on one Android phone. The Django reference is [AkiSync at ecf1eca](https://github.com/unalcubic-m/AkiSync/tree/ecf1eca760a94fc40efd5750711f87434b6e5569). This project is independent of that checkout.
+AkiSync Go is a standalone app for one clinician on one Android phone. It is the only AkiSync version in active use and development. In this project, **AkiSync** means **AkiSync Go**, and all fixes and features target the Android app.
+
+The original AkiSync web app and its Django server are retired. Their source is a read-only reference for bringing existing features and behavior to the mobile app. [Historical Django source](https://github.com/unalcubic-m/AkiSync/tree/ecf1eca760a94fc40efd5750711f87434b6e5569)
 
 The app opens in Turkish by default. To follow the English menu names in this guide, select **English** under **İşler → Ayarlar → Dil** on Android or **İşler → Önizleme verileri → Dil** in the browser preview.
 
 ## Editable browser preview
 
-Run these commands from the mobile directory.
+The browser preview is for trying the Android app's mobile workflows during development. Run these commands from the repository root.
 
 ```sh
 npm ci
@@ -35,7 +37,7 @@ The preview seeds fictional records and stores edits in the browser. Use the gea
 ## Workflow choices
 
 - Closing a treatment records its closure date and optional note. Active and Passive are set on the patient’s own edit form. Passive records stay searchable, and manual booking shows the Passive status.
-- Planning uses the web app’s urgency weights and weights elapsed days by three. Completed visits and clinical encounter notes count as contact. For patients without a recorded visit, elapsed time starts from the patient record’s creation date. A scheduled visit dated today or later, an open task that blocks booking, or a waiting response that blocks booking excludes a patient from planning.
+- Planning uses urgency weights inherited from the retired Django app and weights elapsed days by three. Completed visits and clinical encounter notes count as contact. For patients without a recorded visit, elapsed time starts from the patient record’s creation date. A scheduled visit dated today or later, an open task that blocks booking, or a waiting response that blocks booking excludes a patient from planning.
 - Appointments use the phone’s local date and time. Initial working hours are Monday–Friday, 09:00–17:00, and can be edited in **Calendar → Availability**. For a manually selected overlap, check **Ignore overlap for this booking** for each affected item, including closures. AkiSync records the confirmation under **Scheduling exceptions**. Manual booking records a separate reason for applicable working-hours exceptions, blocking tasks, and blocking waits.
 - **Calendar** opens in **3 days** and remembers your choice of daily, three-day, weekly, or monthly view. Tap the month to jump to a date. **New appointment**, **Close for appointments**, and **Availability** open for the selected date. **Today** lists upcoming visits.
 - Use the calendar view options to turn on **Working days only**. Calendar navigation skips days without working hours or patient appointments. Date-specific hours and all-day time off determine which dates count as working.
@@ -119,5 +121,3 @@ npm run test:e2e
 ```
 
 The browser tests cover the first workflow with networking off after preview load, scheduling conflicts and exceptions, planning eligibility, and responsive layouts. They also run the packaged Android frontend offline against a simulated native bridge to exercise first folder selection, record copies, and the optional app passphrase.
-
-Existing Django records still require a separate import decision.
