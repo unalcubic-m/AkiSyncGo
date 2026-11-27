@@ -1,18 +1,21 @@
 import { CaretDown, CaretRight, Check, CheckCircle, Flask, Plus, UserCircle } from '@phosphor-icons/react';
-import { useRef, useState, type FormEvent } from 'react';
+import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { Field, newId, PageHeader, path, Pill, value } from '../components/ui';
 import { confirmLab, confirmPatientLab, confirmedLabs, createLabPatient, exactLabPatientMatches,
-  labResultToday, labRoute, pendingLabs } from '../domain/daily-lab';
+  labResultToday, labRoute, pendingLabs, recordLabReturn } from '../domain/daily-lab';
 import { titleDate } from '../domain/dates';
-import { labReturnsRoute } from '../domain/lab-returns';
+import { labReturnReviews, labReturnsRoute } from '../domain/lab-returns';
 import type { Patient, RecordChange, Records, Wait } from '../domain/model';
 import type { LabResult } from '../domain/notification-settings';
 import { searchBookingPatients } from '../domain/workflows';
 import { errorMessage, t } from '../i18n';
+import { useRouteField } from '../navigation';
+import { LabReturnReview } from './LabReturnReview';
 import './daily-lab.css';
 
 const pendingLabel = (count: number) => t('{count} lab cases pending', { count });
 const doneLabel = (count: number) => t('{count} lab cases done today', { count });
+const labDone = (name: string) => t('{name} · LabCheck done', { name });
 type Save = (change: RecordChange) => Promise<void>;
 
 export function LabCheckShortcut({ records, today, fromWork = false }: { records: Records; today: string; fromWork?: boolean }) {
@@ -41,37 +44,100 @@ function CaseRow({ wait, patient, onDone, busy }: { wait: Wait; patient?: Patien
   </li>;
 }
 
-function MissingCases({ records, today, busy, run, save }: {
-  records: Records; today: string; busy: boolean; run: (action: () => Promise<string | void>) => Promise<void>; save: Save;
+function MissingCases({ records, today, now, busy, run, save }: {
+  records: Records; today: string; now: Date; busy: boolean; run: (action: () => Promise<string | void>) => Promise<void>; save: Save;
 }) {
-  const [query, setQuery] = useState('');
+  const [expanded, setExpanded] = useRouteField('labMissingOpen', false);
+  const [{ query, reviewPatientId }, setSearch] = useRouteField<{ query: string; reviewPatientId?: string }>('labSearch', { query: '' });
   const [create, setCreate] = useState<'confirm' | 'form'>();
   const [duplicate, setDuplicate] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const results = useRef<HTMLDivElement>(null);
   const firstName = useRef<HTMLInputElement>(null);
+  const reviewCard = useRef<HTMLElement>(null);
   const { patients } = records;
   const exact = exactLabPatientMatches(patients, query);
   const matches = exact.length ? exact : searchBookingPatients(patients, query);
   const parts = query.trim().split(/\s+/).filter(Boolean);
   const hasName = /\p{L}/u.test(query);
+  const reviews = useMemo(() => labReturnReviews(records, today, now), [records, today, now]);
+  const pendingIds = new Set(pendingLabs(records).map(wait => wait.patientId));
+  const selectedPatient = patients.find(patient => patient.id === reviewPatientId);
+  const review = selectedPatient && reviews.get(selectedPatient.id);
 
-  function changeQuery(next: string) { setQuery(next); setCreate(undefined); setDuplicate(false); }
+  function changeQuery(next: string) { setSearch({ query: next }); setCreate(undefined); setDuplicate(false); }
   function focusSearch() { requestAnimationFrame(() => input.current?.focus()); }
+
+  function showReview(patient: Patient) {
+    if (!input.current) return;
+    setSearch({ query, reviewPatientId: patient.id });
+    setDuplicate(false);
+    requestAnimationFrame(() => {
+      reviewCard.current?.scrollIntoView({ block: 'nearest' });
+      reviewCard.current?.focus({ preventScroll: true });
+    });
+  }
+
+  function finishSearch() {
+    if (!input.current) return;
+    changeQuery('');
+    focusSearch();
+  }
 
   function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (exact.length === 1) complete(exact[0]);
+    if (exact.length === 1) selectPatient(exact[0]);
     else if (matches.length) results.current?.querySelector('button')?.focus();
     else if (hasName) setCreate('confirm');
   }
 
-  function complete(patient: Patient) {
+  function selectPatient(patient: Patient) {
+    if (reviews.has(patient.id)) {
+      showReview(patient);
+      return;
+    }
     void run(async () => {
-      await save(current => confirmPatientLab(current, patient.id, today, newId()));
-      changeQuery('');
-      focusSearch();
-      return patient.name;
+      let requiresReview = false;
+      const taskId = newId();
+      await save(current => {
+        requiresReview = labReturnReviews(current, today, now).has(patient.id);
+        return requiresReview ? current : confirmPatientLab(current, patient.id, today, taskId);
+      });
+      if (requiresReview) {
+        showReview(patient);
+        return;
+      }
+      finishSearch();
+      return labDone(patient.name);
+    });
+  }
+
+  function addAnotherReturn(patient: Patient, title?: string) {
+    void run(async () => {
+      let saved = false;
+      const taskId = newId();
+      await save(current => {
+        if (title === undefined && (confirmedLabs(current, today).some(wait => wait.patientId === patient.id)
+          || pendingLabs(current).some(wait => wait.patientId === patient.id))) return current;
+        saved = true;
+        return recordLabReturn(current, patient.id, today, taskId, title);
+      });
+      if (!saved) return;
+      finishSearch();
+      return t('{name} · New lab return saved', { name: patient.name });
+    });
+  }
+
+  function completePending(patient: Patient, job: Wait) {
+    void run(async () => {
+      let saved = false;
+      await save(current => {
+        saved = pendingLabs(current).some(wait => wait.id === job.id && wait.patientId === patient.id);
+        return saved ? confirmLab(current, job.id, today) : current;
+      });
+      if (!saved) return;
+      finishSearch();
+      return labDone(patient.name);
     });
   }
 
@@ -88,14 +154,17 @@ function MissingCases({ records, today, busy, run, save }: {
         found = exactLabPatientMatches(current.patients, name).length > 0;
         return found ? current : createLabPatient(current, name, today, newId(), newId());
       });
-      changeQuery(found ? name : '');
-      setDuplicate(found);
-      focusSearch();
-      return found ? undefined : name;
+      if (input.current) {
+        changeQuery(found ? name : '');
+        setDuplicate(found);
+        focusSearch();
+      }
+      return found ? undefined : labDone(name);
     });
   }
 
-  return <details className="panel lab-missing">
+  return <details className="panel lab-missing" open={expanded}
+    onToggle={event => { if (event.currentTarget.open !== expanded) setExpanded(event.currentTarget.open); }}>
     <summary><span className="lab-icon lab-icon-blue"><Plus size={20} aria-hidden /></span>
       <span><strong>{t('Add Missing Patients / LabCheck Tasks')}</strong><small>{t('Optional · For cases already in the drawer')}</small></span>
       <CaretDown size={17} aria-hidden />
@@ -107,15 +176,19 @@ function MissingCases({ records, today, busy, run, save }: {
         <button type="submit" className="button secondary" disabled={busy || !hasName}>{t('Find')}</button>
       </form>
       {duplicate && <p className="form-error" role="alert">{t('This name is already in the patient list. Choose the matching record below.')}</p>}
-      {matches.length > 0 && !create && <div className="lab-matches" ref={results} aria-label={t('Matching patients')}>
+      {review && <LabReturnReview key={selectedPatient.id} review={review} patient={selectedPatient} today={today} card={reviewCard} busy={busy}
+        onCancel={() => { setSearch({ query }); focusSearch(); }} onAdd={title => addAnotherReturn(selectedPatient, title)}
+        onConfirmPending={job => completePending(selectedPatient, job)} />}
+      {matches.length > 0 && !create && !review && <div className="lab-matches" ref={results} aria-label={t('Matching patients')}>
         {matches.map(patient => {
-          const pending = pendingLabs(records).some(wait => wait.patientId === patient.id);
-          const confirmed = confirmedLabs(records, today).some(wait => wait.patientId === patient.id);
+          const patientReview = reviews.get(patient.id);
+          const label = patientReview ? (patientReview.recordedToday ? 'Already recorded today' : 'Review previous return')
+            : pendingIds.has(patient.id) ? 'Complete pending LabCheck' : 'Add a completed LabCheck';
           const phone = patient.phone.replace(/\D/g, '').slice(-4);
-          return <button key={patient.id} type="button" className="lab-match" disabled={busy} onClick={() => complete(patient)}>
+          return <button key={patient.id} type="button" className="lab-match" disabled={busy} onClick={() => selectPatient(patient)}>
             <span><strong>{patient.name}{phone && <small> · •••• {phone}</small>}</strong>
-              <small>{t(pending ? 'Complete pending LabCheck' : confirmed ? 'Already confirmed today' : 'Add a completed LabCheck')}</small></span>
-            <Check size={18} aria-hidden />
+              <small>{t(label)}</small></span>
+            {patientReview ? <CaretRight size={18} aria-hidden /> : <Check size={18} aria-hidden />}
           </button>;
         })}
       </div>}
@@ -139,8 +212,8 @@ function MissingCases({ records, today, busy, run, save }: {
   </details>;
 }
 
-export default function DailyLabCheck({ records, today, back, save, onClose }: {
-  records: Records; today: string; back: string; save: Save; onClose: (result: LabResult) => Promise<void>;
+export default function DailyLabCheck({ records, today, now, back, save, onClose }: {
+  records: Records; today: string; now: Date; back: string; save: Save; onClose: (result: LabResult) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
@@ -154,8 +227,8 @@ export default function DailyLabCheck({ records, today, back, save, onClose }: {
     if (busy) return;
     setBusy(true); setError(''); setStatus('');
     try {
-      const name = await action();
-      if (name) setStatus(t('{name} · LabCheck done', { name }));
+      const message = await action();
+      if (message) setStatus(message);
     } catch (failure) { setError(errorMessage(failure, 'Could not save. Try again.')); }
     finally { setBusy(false); }
   }
@@ -167,10 +240,14 @@ export default function DailyLabCheck({ records, today, back, save, onClose }: {
     <section aria-labelledby="pending-lab-heading">
       <div className="lab-section-heading"><h2 id="pending-lab-heading">{t('Pending LabCheck tasks')}</h2><Pill tone="blue">{pendingLabel(pending.length)}</Pill></div>
       {pending.length ? <ul className="panel lab-list">{pending.map(wait => <CaseRow key={wait.id} wait={wait} patient={patientFor(wait)} busy={busy}
-        onDone={() => void run(async () => { await save(current => confirmLab(current, wait.id, today)); return patientFor(wait)?.name; })} />)}</ul>
+        onDone={() => void run(async () => {
+          await save(current => confirmLab(current, wait.id, today));
+          const patient = patientFor(wait);
+          return patient ? labDone(patient.name) : undefined;
+        })} />)}</ul>
         : <div className="panel lab-empty"><CheckCircle size={26} aria-hidden /><p>{t('No pending laboratory cases.')}</p></div>}
     </section>
-    <MissingCases records={records} today={today} busy={busy} run={run} save={save} />
+    <MissingCases records={records} today={today} now={now} busy={busy} run={run} save={save} />
     <p className={status ? 'lab-status' : 'visually-hidden'} role="status">{status}</p>
     {confirmed.length > 0 && <details className="panel lab-confirmed">
       <summary><span className="lab-icon lab-icon-green"><CheckCircle size={21} weight="fill" aria-hidden /></span>

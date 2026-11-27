@@ -40,7 +40,12 @@ export function confirmPatientLab(records: Records, patientId: string, today: st
   const pending = pendingLabs(records).find(wait => wait.patientId === patientId);
   if (pending) return confirmLab(records, pending.id, today);
   if (confirmedLabs(records, today).some(wait => wait.patientId === patientId)) return records;
-  const done: Wait = { id: taskId, patientId, title: t('Lab check'), type: 'Laboratory return', status: 'Resolved',
+  return recordLabReturn(records, patientId, today, taskId);
+}
+
+export function recordLabReturn(records: Records, patientId: string, today: string, taskId: string, title = t('Lab check')): Records {
+  if (!records.patients.some(patient => patient.id === patientId)) throw new Error('This patient could not be found.');
+  const done: Wait = { id: taskId, patientId, title, type: 'Laboratory return', status: 'Resolved',
     startedOn: today, reviewOn: null, endedOn: today, blocks: false, notes: '' };
   return { ...records, waits: [...records.waits, done] };
 }

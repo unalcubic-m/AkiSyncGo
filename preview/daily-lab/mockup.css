@@ -72,6 +72,31 @@
 .lab-match svg { color: var(--accent); }
 .lab-create { display: grid; gap: var(--space-2); background: var(--surface-recessed); border-radius: var(--radius-sm); padding: var(--space-3); }
 .lab-create p { color: var(--muted-strong); font-size: var(--text-sm); }
+.lab-return-review { border: 1px solid #e7c99e; border-radius: var(--radius); background: var(--surface); }
+.lab-return-review h3 {
+  display: flex; align-items: center; gap: var(--space-2); margin: 0; padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius) var(--radius) 0 0; background: var(--amber-soft); color: var(--amber);
+  font-size: var(--text-base); line-height: 1.35;
+}
+.lab-return-review h3 svg, .lab-return-review dt svg { flex: none; }
+.lab-return-review dl { margin: 0; padding-inline: var(--space-3); }
+.lab-return-review dl > div { padding-block: var(--space-2); }
+.lab-return-review dl > div + div { border-top: 1px solid var(--border); }
+.lab-return-review dt { display: flex; align-items: center; gap: var(--space-2); color: var(--muted-strong); font-size: var(--text-sm); }
+.lab-return-review dt svg { color: var(--accent); }
+.lab-return-review dd { display: grid; margin: 0; padding-inline-start: calc(17px + var(--space-2)); }
+.lab-return-review dd + dd { margin-top: var(--space-2); }
+.lab-return-review dd small { color: var(--muted-strong); }
+.lab-return-review-actions { display: grid; gap: var(--space-2); padding: var(--space-2) var(--space-3) var(--space-3); }
+.lab-return-review-secondary { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
+.lab-return-review-actions .button { padding-inline: var(--space-3); }
+.lab-return-review-pending, .lab-return-review-form {
+  display: grid; gap: var(--space-2); margin-inline: var(--space-3); padding-block: var(--space-2); border-top: 1px solid var(--border);
+}
+.lab-return-review-pending h4 { margin: 0; font-size: var(--text-sm); }
+.lab-return-review-pending ul { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.lab-return-review-pending li { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); }
+.lab-return-review-pending .button { flex: none; padding-inline: var(--space-2); }
 .lab-status { margin-top: var(--space-2); color: var(--green); font-size: var(--text-sm); font-weight: 650; }
 .lab-actions { display: grid; gap: var(--space-2); margin-top: var(--space-5); }
 .lab-actions small { text-align: center; }

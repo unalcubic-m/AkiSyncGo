@@ -1,4 +1,5 @@
 import { addDays } from './dates';
+import { confirmedLabs, pendingLabs } from './daily-lab';
 import type { Patient, Records, Visit, Wait } from './model';
 import { bookingBlockers, outstandingVisits, planningCandidates, slotOrder, upcomingVisits } from './workflows';
 
@@ -11,6 +12,7 @@ type LabReturnPatient = { patient: Patient; jobs: ReturnedJob[] };
 type BookedReturn = LabReturnPatient & { visit: Visit; outcomePending: boolean };
 type BlockedReturn = LabReturnPatient & { holds: Hold[] };
 export type LabReturnRow = LabReturnPatient | BookedReturn | BlockedReturn;
+export type LabReturnReview = { jobs: Wait[]; pending: Wait[]; recordedToday: boolean; appointment?: Visit; readyToBook: boolean };
 
 function byPatient<T extends { patientId: string | null }>(items: T[]) {
   const groups = new Map<string, T[]>();
@@ -58,6 +60,24 @@ export function returnedLabPatients(records: Records, today: string, now: Date) 
   ready.sort((a, b) => readyRank.get(a.patient.id)! - readyRank.get(b.patient.id)!);
   booked.sort((a, b) => slotOrder(a.visit, b.visit));
   return { ready, blocked, booked };
+}
+
+export function labReturnReviews(records: Records, today: string, now: Date) {
+  const { ready, blocked, booked } = returnedLabPatients(records, today, now);
+  const history = byPatient(confirmedLabs(records, today));
+  for (const { patient, jobs } of [...ready, ...blocked, ...booked]) {
+    if (!history.has(patient.id)) history.set(patient.id, jobs.slice(0, 1));
+  }
+
+  const upcoming = byPatient(upcomingVisits(records, today, now));
+  const pending = byPatient(pendingLabs(records));
+  const readyIds = new Set(ready.map(({ patient }) => patient.id));
+  const reviews = new Map<string, LabReturnReview>();
+  for (const [patientId, jobs] of history) {
+    reviews.set(patientId, { jobs, pending: pending.get(patientId) ?? [], recordedToday: jobs[0].endedOn === today,
+      appointment: upcoming.get(patientId)?.[0], readyToBook: readyIds.has(patientId) });
+  }
+  return reviews;
 }
 
 export function appointmentsWithBookingHolds(records: Records, today: string) {

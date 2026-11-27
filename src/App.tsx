@@ -145,7 +145,7 @@ export default function App({ repository, native = false, previewStatus = 'Ficti
     const outcomeReturn = from ? outcomeReturnRoutes.get(from) : undefined;
     const appointmentBack = outcomeReturn ?? (from === 'patient-search' ? '/patients' : from === 'today' ? '/today' : from === 'calendar' ? calendarBack
       : from === 'availability' ? '/availability' + (calendarDay ? '?date=' + calendarDay : '')
-      : from === 'planning' ? '/planning' : from === labReturnsView ? labReturnsRoute
+      : from === 'planning' ? '/planning' : from === 'daily-lab' ? labRoute : from === labReturnsView ? labReturnsRoute
       : from === 'attention' ? '/attention' : from === 'calendar-conflicts' ? '/calendar-conflicts'
       : from === 'ignored-calendar-events' ? '/ignored-calendar-events'
       : profileBack ? '/patients/' + profileBack : calendarBack);
@@ -156,7 +156,7 @@ export default function App({ repository, native = false, previewStatus = 'Ficti
       case 'today': return <Today records={records} today={today} now={now} outstanding={outstanding} calendarAccess={calendarAccess} save={save} />;
       case 'daily-lab': {
         const back = from === 'responses' ? labFollowUpsRoute : '/today';
-        return <DailyLabCheck key={today} records={records} today={today} back={back}
+        return <DailyLabCheck key={today} records={records} today={today} now={now} back={back}
           save={change => save(change, { offerBooking: false })} onClose={async result => {
             const date = localDate();
             await save(current => ({ ...current, dailyLabCheck: { date, result } }), { offerBooking: false });

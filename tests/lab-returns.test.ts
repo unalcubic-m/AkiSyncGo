@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appointmentsWithBookingHolds, returnedLabPatients } from '../src/domain/lab-returns';
+import { appointmentsWithBookingHolds, labReturnReviews, returnedLabPatients } from '../src/domain/lab-returns';
 import type { Records, Visit, Wait } from '../src/domain/model';
 import { fictionalRecords } from '../src/storage/fixtures';
 
@@ -51,6 +51,27 @@ describe('patients with work returned from lab', () => {
         .toMatchObject({ ready: [], booked: [], blocked: [{ holds: [{ id: task.id }], jobs: [{ id: 'returned' }] }] });
     }
   });
+});
+
+it('reviews repeat returns until a visit closes the booking cycle, while still warning about same-day entries', () => {
+  const profile = 'demo-ada';
+  const earlier = lab('earlier', profile, '2026-11-21');
+  const last = lab('last', profile, yesterday);
+  const records = { ...base, waits: [earlier, last] };
+  expect(labReturnReviews(records, today, now).get(profile)).toEqual({
+    jobs: [last], pending: [], recordedToday: false, appointment: undefined, readyToBook: true,
+  });
+
+  const waiting = lab('new-job', profile, null);
+  expect(labReturnReviews({ ...records, waits: [...records.waits, waiting] }, today, now).get(profile))
+    .toMatchObject({ jobs: [last], pending: [waiting], readyToBook: false });
+
+  const completed = visit('completed', profile, today, { status: 'Completed' });
+  expect(labReturnReviews({ ...records, appointments: [completed] }, today, now).has(profile)).toBe(false);
+  const recordedToday = lab('recorded-today', profile, today);
+  const next = visit('next', profile, tomorrow);
+  expect(labReturnReviews({ ...records, waits: [...records.waits, recordedToday], appointments: [completed, next] }, today, now).get(profile))
+    .toEqual({ jobs: [recordedToday], pending: [], recordedToday: true, appointment: next, readyToBook: false });
 });
 
 it('warns for today and tomorrow while any lab or non-lab booking hold is open', () => {

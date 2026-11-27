@@ -22,7 +22,10 @@ export const bookingDate = (today: string) => {
 };
 
 export type LabResult = 'finished' | 'nothing' | 'dismissed';
-export const reopenCheckedLab = new URLSearchParams(window.location.search).get('variant') === 'inline-check';
+const variant = new URLSearchParams(window.location.search).get('variant');
+export const reviewLabReturns = variant === 'return-review';
+export const reopenCheckedLab = variant === 'inline-check' || reviewLabReturns;
+export const returnReviewPatientId = 'demo-eli';
 export type BufferSettings = { enabled: boolean; minutes: number };
 export type LabNotificationSettings = { enabled: boolean; time: string; days: number[] };
 const everyDay = [0, 1, 2, 3, 4, 5, 6];
@@ -37,18 +40,33 @@ function seed(): PreviewData {
   const today = previewDate();
   const records = fictionalRecords(parseDate(today));
   const exampleDay = bookingDate(today);
+  const crown: Wait = { id: 'lab-crown', patientId: returnReviewPatientId, title: 'Ceramic crown', type: 'Laboratory return', status: 'Waiting',
+    startedOn: addDays(today, -3), reviewOn: today, endedOn: null, blocks: true, notes: '' };
   const waits: Wait[] = [
     { id: 'lab-bridge', patientId: 'demo-mira', title: 'Zirconia bridge', type: 'Laboratory return', status: 'Waiting',
       startedOn: addDays(today, -5), reviewOn: today, endedOn: null, blocks: true, notes: '' },
-    { id: 'lab-crown', patientId: 'demo-eli', title: 'Ceramic crown', type: 'Laboratory return', status: 'Waiting',
-      startedOn: addDays(today, -3), reviewOn: today, endedOn: null, blocks: true, notes: '' },
+    reviewLabReturns ? { ...crown, title: copy('Ceramic crown', 'Seramik kuron'), status: 'Resolved',
+      endedOn: addDays(today, -1), reviewOn: null, blocks: false } : crown,
     { id: 'lab-guard', patientId: 'demo-ada', title: 'Night guard', type: 'Laboratory return', status: 'Waiting',
       startedOn: addDays(today, -4), reviewOn: today, endedOn: null, blocks: true, notes: '' },
   ];
+  const appointments = records.appointments.filter(item => item.date !== exampleDay && (!reviewLabReturns || item.patientId !== returnReviewPatientId));
+  if (reviewLabReturns) {
+    appointments.push({
+      id: 'demo-crown-fitting', patientId: returnReviewPatientId, date: exampleDay, start: '10:00', end: '10:30', kind: 'Visit',
+      title: copy('Crown fitting', 'Kuron provası'), status: 'Scheduled', procedure: '', notes: '', exceptions: [],
+    });
+    const readyPatientId = 'demo-derya';
+    records.patients.push({ id: readyPatientId, name: uppercasePatientName('Derya Koç'), phone: '', email: '', priority: 'Normal',
+      status: 'Active', createdOn: addDays(today, -25), priorityNote: '', summary: '', nextAction: '' });
+    waits.push({ id: 'lab-derya-guard', patientId: readyPatientId, title: copy('Night guard', 'Gece plağı'),
+      type: 'Laboratory return', status: 'Resolved', startedOn: addDays(today, -8), endedOn: addDays(today, -2),
+      reviewOn: null, blocks: false, notes: '' });
+  }
   return {
     records: {
       ...records,
-      appointments: records.appointments.filter(item => item.date !== exampleDay),
+      appointments,
       waits: [...records.waits, ...waits],
     },
     notification: { enabled: true, time: '10:00', days: everyDay },
@@ -56,8 +74,9 @@ function seed(): PreviewData {
   };
 }
 
-const storageKey = reopenCheckedLab ? 'akisync-preview-daily-lab-inline-v1' : 'akisync-preview-daily-lab-v1';
+const storageKey = reviewLabReturns ? null : reopenCheckedLab ? 'akisync-preview-daily-lab-inline-v1' : 'akisync-preview-daily-lab-v1';
 function load(): PreviewData {
+  if (!storageKey) return seed();
   try {
     const stored = localStorage.getItem(storageKey);
     if (stored) {
@@ -81,13 +100,13 @@ export function subscribe(listener: () => void) {
 
 export function update(change: (current: PreviewData) => PreviewData) {
   data = change(data);
-  try { localStorage.setItem(storageKey, JSON.stringify(data)); }
+  try { if (storageKey) localStorage.setItem(storageKey, JSON.stringify(data)); }
   catch { /* Keep the active preview usable if browser storage is unavailable. */ }
   listeners.forEach(listener => listener());
 }
 
 window.addEventListener('storage', event => {
-  if (event.key !== storageKey) return;
+  if (!storageKey || event.key !== storageKey) return;
   data = load();
   listeners.forEach(listener => listener());
 });
@@ -130,8 +149,12 @@ function completePatientLab(records: Records, patient: Patient, today: string) {
       ? { ...wait, status: 'Resolved' as const, endedOn: today } : wait) };
   }
   if (confirmedLabs(records, today).some(wait => wait.patientId === patient.id)) return records;
+  return recordLabReturn(records, patient.id, today, t('Lab check'));
+}
+
+function recordLabReturn(records: Records, patientId: string, today: string, title: string): Records {
   const done: Wait = {
-    id: newId(), patientId: patient.id, title: t('Lab check'), type: 'Laboratory return', status: 'Resolved',
+    id: newId(), patientId, title, type: 'Laboratory return', status: 'Resolved',
     startedOn: today, reviewOn: null, endedOn: today, blocks: false, notes: '',
   };
   return { ...records, waits: [...records.waits, done] };
@@ -139,6 +162,10 @@ function completePatientLab(records: Records, patient: Patient, today: string) {
 
 export function confirmPatient(patient: Patient, today: string) {
   saveRecords(records => completePatientLab(records, patient, today));
+}
+
+export function addNamedLabReturn(patient: Patient, today: string, title: string) {
+  saveRecords(records => recordLabReturn(records, patient.id, today, title));
 }
 
 export function addPatient(first: string, last: string, today: string) {

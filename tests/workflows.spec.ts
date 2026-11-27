@@ -601,11 +601,16 @@ test('Nothing arrived hides the Today shortcut and leaves the lab screen usable 
 
   await page.getByText('Add Missing Patients / LabCheck Tasks').click();
   const name = page.getByRole('searchbox', { name: 'Patient name' });
-  for (const patient of ['Mira Arden', 'Nora Vale', 'Nora Vale']) {
+  for (const patient of ['Mira Arden', 'Nora Vale']) {
     await name.fill(patient);
     await page.getByRole('button', { name: 'Find', exact: true }).click();
     await expect(name).toHaveValue('');
   }
+  await name.fill('Nora Vale');
+  await page.getByRole('button', { name: 'Find', exact: true }).click();
+  const repeat = page.getByRole('region', { name: 'Already recorded today' });
+  await expect(repeat).toBeVisible();
+  await repeat.getByRole('button', { name: 'Cancel' }).click();
   await name.fill('Jamie Stone');
   await page.getByRole('button', { name: 'Find', exact: true }).click();
   await page.getByRole('button', { name: 'Create patient' }).click();
@@ -644,6 +649,67 @@ test('Nothing arrived hides the Today shortcut and leaves the lab screen usable 
   await expect(page.getByText('Checked today', { exact: true })).toHaveCount(0);
   await expect(pending.getByText('Retainer')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Nothing arrived' })).toBeVisible();
+});
+
+test('lab return review prevents repeat saves and offers the patient’s appointment action', async ({ page }) => {
+  const today = '2026-11-23';
+  const records = fictionalRecords(new Date('2026-11-23T08:00:00+03:00'));
+  records.appointments = records.appointments.filter(appointment => appointment.id !== 'demo-2');
+  const crown = { id: 'lab-crown', patientId: 'demo-eli', title: 'Ceramic crown', type: 'Laboratory return', status: 'Resolved',
+    startedOn: '2026-11-18', reviewOn: null, endedOn: today, blocks: false, notes: '' } as const;
+  const pending = { ...crown, id: 'lab-retainer', title: 'Retainer', status: 'Waiting', endedOn: null } as const;
+  const other = { ...pending, id: 'lab-guard', title: 'Night guard' };
+  const earlier = { ...crown, id: 'lab-bridge', patientId: 'demo-ada', title: 'Zirconia bridge', endedOn: '2026-11-20' };
+  records.waits.push(crown, pending, other, earlier);
+  await page.addInitScript(data => {
+    const key = 'akisync-fictional-preview-v1';
+    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(data));
+  }, records);
+  const savedRecords = () => page.evaluate(() => JSON.parse(localStorage.getItem('akisync-fictional-preview-v1')!)) as Promise<typeof records>;
+
+  await page.goto('/#/daily-lab?from=responses');
+  await page.getByText('Add Missing Patients / LabCheck Tasks').click();
+  const search = page.getByRole('searchbox', { name: 'Patient name' });
+  const find = page.getByRole('button', { name: 'Find', exact: true });
+  const sameDay = page.getByRole('region', { name: 'Already recorded today' });
+  await search.fill('Eli');
+  await find.click();
+  await page.getByRole('button', { name: /ELİ DEMİR.*Already recorded today/ }).click();
+  await expect(sameDay.getByText('Ceramic crown')).toBeVisible();
+  await expect(sameDay.getByText('Progress check')).toBeVisible();
+  await sameDay.getByRole('button', { name: 'Cancel' }).click();
+  await search.fill('Eli Demir');
+  await find.click();
+  expect((await savedRecords()).waits).toEqual(records.waits);
+
+  await sameDay.getByRole('link', { name: 'Open appointment' }).click();
+  await expect(page.getByRole('heading', { name: 'Progress check' })).toBeVisible();
+  await page.getByRole('link', { name: 'Back', exact: true }).click();
+  await expect(page).toHaveURL(/#\/daily-lab\?from=responses$/);
+  await sameDay.getByRole('button', { name: 'Mark ELİ DEMİR, Retainer done' }).click();
+  await expect(page.getByText('2 lab cases done today')).toBeVisible();
+  expect((await savedRecords()).waits).toEqual(expect.arrayContaining([{ ...pending, status: 'Resolved', endedOn: today }, other]));
+
+  await search.fill('Eli Demir');
+  await find.click();
+  await sameDay.getByRole('button', { name: 'Add another return' }).click();
+  const save = sameDay.getByRole('button', { name: 'Save lab return' });
+  await expect(save).toBeDisabled();
+  await sameDay.getByRole('textbox', { name: 'What arrived?' }).fill('Opposing model');
+  await save.click();
+  await expect(page.getByText('3 lab cases done today')).toBeVisible();
+  expect((await savedRecords()).waits).toEqual(expect.arrayContaining([
+    expect.objectContaining({ patientId: 'demo-eli', title: 'Opposing model', status: 'Resolved', endedOn: today }), other,
+  ]));
+
+  await search.fill('Ada Kestrel');
+  await find.click();
+  const previous = page.getByRole('region', { name: 'Lab return already recorded' });
+  await expect(previous.getByText('Zirconia bridge')).toBeVisible();
+  await expect(previous.locator('time')).toHaveAttribute('datetime', earlier.endedOn);
+  await previous.getByRole('link', { name: 'Schedule appointment' }).click();
+  await expect(page.getByRole('button', { name: 'Patient ADA KESTREL' })).toBeVisible();
+  expect((await savedRecords()).appointments).toEqual(records.appointments);
 });
 
 test('Dismiss for today returns to the original Follow-ups view and persists through a reload', async ({ page }) => {
